@@ -54,7 +54,9 @@ class Document(models.Model):
     directory = models.ForeignKey(
         Directory,
         on_delete=models.CASCADE,
-        related_name='documents'
+        related_name='documents',
+        blank=True,
+        null=True
     )
     folder = models.ForeignKey(
         Folder,
@@ -64,7 +66,7 @@ class Document(models.Model):
         null=True
     )
     title = models.CharField(max_length=200)
-    filename = models.CharField(max_length=200, unique=True)
+    filename = models.CharField(max_length=200)
     content = models.TextField(blank=True, null=True)
     publish_status = models.CharField(
         max_length=20,

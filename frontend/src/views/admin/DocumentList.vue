@@ -428,13 +428,23 @@ function handleSubmit() {
 }
 
 function createSubfolder() {
-  if (!newSubfolderName.value.trim() || !selectedDirectory.value) {
+  if (!newSubfolderName.value.trim()) {
     return
   }
-  axios.post('/documents/folders/', {
-    name: newSubfolderName.value,
-    directory: selectedDirectory.value
-  })
+  
+  const data: Record<string, any> = {
+    name: newSubfolderName.value
+  }
+  
+  if (selectedFolder.value) {
+    data.parent = selectedFolder.value
+  } else if (selectedDirectory.value) {
+    data.directory = selectedDirectory.value
+  } else {
+    return
+  }
+  
+  axios.post('/documents/folders/', data)
   .then(() => {
     loadFolders()
     showSubfolderDialog.value = false
@@ -454,7 +464,21 @@ function cancelImport() {
 }
 
 function handleFileChange(file: any, fileList: any[]) {
-  importFiles.value = fileList.map(f => f.raw)
+  const newFiles = fileList.map(f => f.raw)
+  
+  const uniqueFiles: File[] = []
+  const seenNames = new Set<string>()
+  
+  for (const f of newFiles) {
+    if (!seenNames.has(f.name)) {
+      seenNames.add(f.name)
+      uniqueFiles.push(f)
+    } else {
+      alert(`文件 "${f.name}" 已存在于选择列表中，将跳过重复文件`)
+    }
+  }
+  
+  importFiles.value = uniqueFiles
 }
 
 function removeImportFile(index: number) {
@@ -469,7 +493,9 @@ function startUpload() {
   importFiles.value.forEach(file => {
     const formData = new FormData()
     formData.append('file', file)
-    if (selectedDirectory.value) {
+    if (selectedFolder.value) {
+      formData.append('folder', selectedFolder.value.toString())
+    } else if (selectedDirectory.value) {
       formData.append('directory', selectedDirectory.value.toString())
     }
     

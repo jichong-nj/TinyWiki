@@ -186,11 +186,37 @@ class DocumentListView(APIView):
             title = filename.rsplit('.', 1)[0] if '.' in filename else filename
             content = file.read().decode('utf-8')
             
+            directory_id = request.data.get('directory')
+            folder_id = request.data.get('folder')
+            
+            if folder_id:
+                try:
+                    folder = Folder.objects.get(pk=folder_id)
+                    directory_id = folder.directory_id if folder.directory else None
+                except Folder.DoesNotExist:
+                    return Response(
+                        {'error': '指定的文件夹不存在'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            existing_documents = Document.objects.filter(filename=filename)
+            if directory_id and folder_id:
+                existing_documents = existing_documents.filter(folder_id=folder_id)
+            elif directory_id:
+                existing_documents = existing_documents.filter(directory_id=directory_id, folder__isnull=True)
+            
+            if existing_documents.exists():
+                return Response(
+                    {'error': f'文件 "{filename}" 已存在于当前目录/文件夹中'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
             data = {
                 'title': title,
                 'filename': filename,
                 'content': content,
-                'directory': request.data.get('directory')
+                'directory': directory_id,
+                'folder': folder_id
             }
             
             serializer = DocumentSerializer(data=data)
