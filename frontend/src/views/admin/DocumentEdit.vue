@@ -18,20 +18,7 @@
         <el-tabs v-model="activeTab" type="card">
           <el-tab-pane label="编辑" name="edit">
             <div class="editor-wrapper">
-              <div class="editor-toolbar">
-                <el-button text @click="insertHeading">H1</el-button>
-                <el-button text @click="insertHeading(2)">H2</el-button>
-                <el-button text @click="insertHeading(3)">H3</el-button>
-                <el-divider direction="vertical" />
-                <el-button text @click="insertBold">Bold</el-button>
-                <el-button text @click="insertItalic">Italic</el-button>
-                <el-button text @click="insertCode">Code</el-button>
-                <el-divider direction="vertical" />
-                <el-button text @click="insertList('ul')">UL</el-button>
-                <el-button text @click="insertList('ol')">OL</el-button>
-                <el-button text @click="insertTable">Table</el-button>
-              </div>
-              <textarea v-model="form.content" class="editor-textarea" placeholder="开始编写文档..." />
+              <MarkdownEditor v-model="form.content" height="100%" mode="split" />
             </div>
           </el-tab-pane>
           <el-tab-pane label="预览" name="preview">
@@ -70,6 +57,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from '../../axios'
+import MarkdownEditor from '../../components/MarkdownEditor.vue'
 
 interface Document {
   id: number
@@ -198,34 +186,10 @@ function renderMarkdown(text: string) {
     .replace(/\*\*(.*)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
     .replace(/\n/g, '<br>')
   return html
-}
-
-function insertHeading(level = 1) {
-  const prefix = '#'.repeat(level) + ' '
-  form.content += prefix + '标题\n\n'
-}
-
-function insertBold() {
-  form.content += '**粗体文本**'
-}
-
-function insertItalic() {
-  form.content += '*斜体文本*'
-}
-
-function insertCode() {
-  form.content += '`代码`'
-}
-
-function insertList(type: string) {
-  const bullet = type === 'ul' ? '- ' : '1. '
-  form.content += `${bullet}列表项\n`
-}
-
-function insertTable() {
-  form.content += `| 列1 | 列2 |\n| --- | --- |\n| 值1 | 值2 |\n\n`
 }
 
 function viewVersion(version: DocumentVersion) {
@@ -280,25 +244,7 @@ onMounted(() => {
 
 .editor-wrapper {
   height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.editor-toolbar {
-  padding: 10px;
-  background: #f5f5f5;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.editor-textarea {
-  flex: 1;
-  width: 100%;
-  resize: none;
-  border: none;
-  padding: 15px;
-  font-family: monospace;
-  font-size: 14px;
-  line-height: 1.6;
+  min-height: 500px;
 }
 
 .preview-wrapper {
@@ -311,6 +257,8 @@ onMounted(() => {
 .preview-wrapper :deep(h1) {
   font-size: 24px;
   margin: 20px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #3498db;
 }
 
 .preview-wrapper :deep(h2) {
@@ -336,6 +284,26 @@ onMounted(() => {
   padding: 2px 6px;
   border-radius: 4px;
   font-family: monospace;
+}
+
+.preview-wrapper :deep(pre) {
+  background: #2d2d2d;
+  color: #ccc;
+  padding: 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.preview-wrapper :deep(pre code) {
+  background: none;
+  padding: 0;
+  color: #ccc;
+}
+
+.preview-wrapper :deep(a) {
+  color: #3498db;
+  text-decoration: none;
 }
 
 .empty-history {
