@@ -180,17 +180,42 @@ class DocumentListView(APIView):
         return Response(serializer.data)
     
     def post(self, request):
-        serializer = DocumentSerializer(data=request.data)
-        if serializer.is_valid():
-            document = serializer.save()
-            DocumentVersion.objects.create(
-                document=document,
-                version_number=1,
-                content=document.content or '',
-                modified_by=request.user
-            )
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if 'file' in request.data:
+            file = request.data['file']
+            filename = file.name
+            title = filename.rsplit('.', 1)[0] if '.' in filename else filename
+            content = file.read().decode('utf-8')
+            
+            data = {
+                'title': title,
+                'filename': filename,
+                'content': content,
+                'directory': request.data.get('directory')
+            }
+            
+            serializer = DocumentSerializer(data=data)
+            if serializer.is_valid():
+                document = serializer.save()
+                DocumentVersion.objects.create(
+                    document=document,
+                    version_number=1,
+                    content=document.content or '',
+                    modified_by=request.user
+                )
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            serializer = DocumentSerializer(data=request.data)
+            if serializer.is_valid():
+                document = serializer.save()
+                DocumentVersion.objects.create(
+                    document=document,
+                    version_number=1,
+                    content=document.content or '',
+                    modified_by=request.user
+                )
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DocumentDetailView(APIView):

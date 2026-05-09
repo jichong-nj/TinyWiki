@@ -55,6 +55,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item @click="showSubfolderDialog = true">创建子文件夹</el-dropdown-item>
+                  <el-dropdown-item @click="showImportDialog = true">导入文件</el-dropdown-item>
                   <el-dropdown-item>批量删除</el-dropdown-item>
                   <el-dropdown-item>导出</el-dropdown-item>
                 </el-dropdown-menu>
@@ -155,11 +156,46 @@
         <el-button type="primary" @click="createSubfolder">确定</el-button>
       </template>
     </el-dialog>
+    
+    <el-dialog title="导入文件" v-model="showImportDialog" @close="cancelImport">
+      <div class="import-area">
+        <el-upload
+          ref="uploadRef"
+          :action="uploadUrl"
+          :headers="uploadHeaders"
+          :data="uploadData"
+          :multiple="true"
+          accept=".md"
+          :auto-upload="false"
+          :on-change="handleFileChange"
+          :on-success="handleUploadSuccess"
+          :on-error="handleUploadError"
+          class="upload-demo"
+        >
+          <el-button type="primary" icon="Upload">选择文件</el-button>
+          <template #tip>
+            <div class="el-upload__tip">支持 .md 格式文件，可多选</div>
+          </template>
+        </el-upload>
+        
+        <div v-if="importFiles.length > 0" class="file-list">
+          <div v-for="(file, index) in importFiles" :key="index" class="file-item">
+            <el-icon class="file-icon"><File /></el-icon>
+            <span class="file-name">{{ file.name }}</span>
+            <el-button type="text" size="small" @click="removeImportFile(index)">移除</el-button>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="cancelImport">取消</el-button>
+        <el-button type="primary" @click="startUpload">开始导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
 import { MoreFilled, FolderOpened, Plus, Document } from '@element-plus/icons-vue'
@@ -201,6 +237,19 @@ const editingFolder = ref<Folder | null>(null)
 
 const showSubfolderDialog = ref(false)
 const newSubfolderName = ref('')
+
+const showImportDialog = ref(false)
+const importFiles = ref<File[]>([])
+const uploadRef = ref()
+
+const uploadUrl = computed(() => '/documents/documents/')
+const uploadHeaders = computed(() => {
+  const token = localStorage.getItem('accessToken')
+  return { Authorization: `Bearer ${token}` }
+})
+const uploadData = computed(() => ({
+  directory: selectedDirectory.value || ''
+}))
 
 const draftCount = ref(0)
 const pendingAnalysisCount = ref(0)
@@ -359,6 +408,54 @@ function createSubfolder() {
 function cancelCreateSubfolder() {
   showSubfolderDialog.value = false
   newSubfolderName.value = ''
+}
+
+function cancelImport() {
+  showImportDialog.value = false
+  importFiles.value = []
+}
+
+function handleFileChange(file: any, fileList: any[]) {
+  importFiles.value = fileList.map(f => f.raw)
+}
+
+function removeImportFile(index: number) {
+  importFiles.value.splice(index, 1)
+}
+
+function startUpload() {
+  if (importFiles.value.length === 0) {
+    return
+  }
+  
+  importFiles.value.forEach(file => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (selectedDirectory.value) {
+      formData.append('directory', selectedDirectory.value.toString())
+    }
+    
+    axios.post('/documents/documents/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+      }
+    })
+    .then(() => {
+      loadDocuments()
+    })
+    .catch(error => console.error('导入文件失败:', error))
+  })
+  
+  cancelImport()
+}
+
+function handleUploadSuccess() {
+  loadDocuments()
+}
+
+function handleUploadError() {
+  console.error('上传失败')
 }
 
 function editFolder(folder: Folder) {
@@ -602,6 +699,44 @@ onMounted(() => {
 .folder-icon {
   color: #e6a23c;
   font-size: 16px;
+}
+
+.import-area {
+  padding: 10px;
+}
+
+.file-list {
+  margin-top: 15px;
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  margin-bottom: 5px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+
+.file-item:last-child {
+  margin-bottom: 0;
+}
+
+.file-icon {
+  color: #1890ff;
+  margin-right: 8px;
+}
+
+.file-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.upload-demo {
+  margin-bottom: 10px;
 }
 
 .doc-name {
