@@ -2,9 +2,7 @@
   <div class="document-list">
     <div class="list-header">
       <div class="header-left">
-        <el-select v-model="selectedDirectory" placeholder="选择目录">
-          <el-option v-for="dir in directories" :key="dir.id" :label="dir.name" :value="dir.id" />
-        </el-select>
+        <span class="stats-text">未发布{{ draftCount }}条，待分析{{ pendingAnalysisCount }}条</span>
       </div>
       <div class="header-right">
         <el-button type="primary" @click="createDocument">创建文档</el-button>
@@ -121,8 +119,13 @@ const showAddDialog = ref(false)
 const newDirName = ref('')
 const editingDir = ref<Directory | null>(null)
 
+const draftCount = ref(0)
+const pendingAnalysisCount = ref(0)
 
-
+function updateStats() {
+  draftCount.value = documents.value.filter(doc => doc.publish_status === 'draft').length
+  pendingAnalysisCount.value = documents.value.filter(doc => doc.analysis_status !== 'completed').length
+}
 function getAnalysisTagType(status: string) {
   switch (status) {
     case 'completed': return 'success'
@@ -147,6 +150,7 @@ function loadDocuments() {
   axios.get('/documents/documents/', { params })
     .then(response => {
       documents.value = response.data
+      updateStats()
     })
     .catch(error => console.error('加载文档失败:', error))
 }
@@ -272,7 +276,11 @@ onMounted(() => {
 }
 
 .header-left {
-  width: 200px;
+}
+
+.stats-text {
+  font-size: 14px;
+  color: #666;
 }
 
 .list-content {
