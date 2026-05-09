@@ -23,7 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref<string | null>(null)
   const refreshToken = ref<string | null>(null)
 
-  const isLoggedIn = computed(() => !!accessToken.value && !!user.value)
+  const isLoggedIn = computed(() => !!accessToken.value)
 
   function login(username: string, password: string) {
     return axios.post('/auth/login/', { username, password })

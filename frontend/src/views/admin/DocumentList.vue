@@ -159,6 +159,10 @@ function loadDirectories() {
   axios.get('/documents/directories/')
     .then(response => {
       directories.value = response.data
+      if (directories.value.length > 0 && !selectedDirectory.value) {
+        selectedDirectory.value = directories.value[0].id
+        loadDocuments()
+      }
     })
     .catch(error => console.error('加载目录失败:', error))
 }
@@ -298,7 +302,7 @@ onMounted(() => {
 }
 
 .tree-content {
-  padding: 8px;
+  padding: 4px;
   max-height: calc(100vh - 200px);
   overflow-y: auto;
 }
@@ -306,18 +310,21 @@ onMounted(() => {
 .tree-item {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 10px 12px;
+  margin: 2px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
+  background-color: #fafafa;
 }
 
 .tree-item:hover {
-  background-color: #f5f7fa;
+  background-color: #f0f2f5;
 }
 
 .tree-item.active {
   background-color: #e8f4fd;
+  border-left: 3px solid #1890ff;
 }
 
 .tree-item.active .dir-name {
