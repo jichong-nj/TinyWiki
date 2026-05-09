@@ -5,14 +5,6 @@
         <h1 class="wiki-title">📖 {{ siteName }}</h1>
       </div>
       <div class="header-center">
-        <select v-model="selectedKB" @change="onKBChange" class="kb-select">
-          <option :value="null">选择知识库</option>
-          <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb">
-            {{ kb.name }}
-          </option>
-        </select>
-      </div>
-      <div class="header-right">
         <div class="search-box">
           <span class="search-icon">🔍</span>
           <input 
@@ -22,6 +14,14 @@
             @keyup.enter="handleSearch"
           />
         </div>
+      </div>
+      <div class="header-right">
+        <select v-model="selectedKB" @change="onKBChange" class="kb-select">
+          <option :value="null">选择知识库</option>
+          <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb">
+            {{ kb.name }}
+          </option>
+        </select>
       </div>
     </header>
 
@@ -37,6 +37,29 @@
           {{ dir.name }}
         </div>
       </nav>
+
+      <div v-if="showSearchResults && searchResults.length" class="search-results-overlay" @click="showSearchResults = false">
+        <div class="search-results-panel" @click.stop>
+          <div class="search-results-header">
+            <h3>搜索结果</h3>
+            <span class="results-count">共 {{ searchResults.length }} 条结果</span>
+          </div>
+          <div class="search-results-list">
+            <div 
+              v-for="result in searchResults" 
+              :key="result.id"
+              class="search-result-item"
+              @click="selectSearchResult(result)"
+            >
+              <div class="result-title">{{ result.title }}</div>
+              <div class="result-meta">
+                <span class="result-filename">{{ result.filename }}</span>
+                <span class="result-date">{{ formatTime(result.updated_at) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="wiki-main-content">
         <aside class="sidebar">
@@ -437,9 +460,47 @@ const handleContentScroll = () => {
   activeTocItem.value = currentHeading
 }
 
-const handleSearch = () => {
-  if (!searchQuery.value.trim()) return
-  console.log('Search:', searchQuery.value)
+interface SearchResult {
+  id: number
+  title: string
+  filename: string
+  content: string
+  updated_at: string
+}
+
+const searchResults = ref<SearchResult[]>([])
+const showSearchResults = ref(false)
+
+const handleSearch = async () => {
+  if (!searchQuery.value.trim()) {
+    showSearchResults.value = false
+    searchResults.value = []
+    return
+  }
+  
+  try {
+    const response = await axios.get('/documents/documents/search/', {
+      params: {
+        q: searchQuery.value,
+        directory: selectedDirectory.value?.id
+      }
+    })
+    searchResults.value = response.data
+    showSearchResults.value = true
+  } catch (error) {
+    console.error('Search failed:', error)
+  }
+}
+
+const selectSearchResult = async (result: SearchResult) => {
+  selectedFile.value = {
+    id: result.id,
+    name: result.title,
+    updated_at: result.updated_at
+  }
+  showSearchResults.value = false
+  searchQuery.value = ''
+  await loadFileContent(result.id)
 }
 
 const formatTime = (dateString?: string) => {
@@ -1000,5 +1061,94 @@ watch(selectedDirectory, () => {
   justify-content: center;
   align-items: center;
   background: #f8f9fa;
+}
+
+.search-results-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 120px;
+  z-index: 1000;
+}
+
+.search-results-panel {
+  width: 600px;
+  max-height: 70vh;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.search-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+.search-results-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.results-count {
+  font-size: 13px;
+  color: #6c757d;
+}
+
+.search-results-list {
+  max-height: calc(70vh - 60px);
+  overflow-y: auto;
+}
+
+.search-result-item {
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.search-result-item:hover {
+  background: #f8f9fa;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.result-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: #2c3e50;
+  margin-bottom: 6px;
+}
+
+.result-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #6c757d;
+}
+
+.result-filename {
+  padding: 2px 8px;
+  background: #f1f3f4;
+  border-radius: 4px;
+}
+
+.result-date {
+  display: flex;
+  align-items: center;
 }
 </style>

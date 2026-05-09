@@ -440,8 +440,11 @@ class DocumentSearchView(APIView):
             return Response([])
         
         search_query = SearchQuery(query, config='chinese')
+        search_vector = SearchVector('title', 'content', config='chinese')
         
-        documents = Document.objects.filter(
+        documents = Document.objects.annotate(
+            rank=SearchRank(search_vector, search_query)
+        ).filter(
             search_vector=search_query,
             publish_status='published'
         )
@@ -450,6 +453,8 @@ class DocumentSearchView(APIView):
             documents = documents.filter(folder_id=folder_id)
         elif directory_id:
             documents = documents.filter(directory_id=directory_id)
+        
+        documents = documents.order_by('-rank', '-updated_at')
         
         serializer = DocumentSerializer(documents, many=True)
         return Response(serializer.data)
