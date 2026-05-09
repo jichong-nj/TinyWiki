@@ -1,0 +1,6 @@
+# test
+
+此文件为Word文档，请安装python-docx库以获得更好的转换效果。
+
+原始文件名: test.docx
+文件大小: 394228 bytes

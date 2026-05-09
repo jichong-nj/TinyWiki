@@ -14,7 +14,13 @@ from .views import (
     DocumentSearchView,
     VectorSearchView,
     PermissionListView,
-    PermissionDetailView
+    PermissionDetailView,
+    FileUploadView,
+    FileUploadMultipleView,
+    FileAccessView,
+    FileInfoView,
+    DocumentAttachmentListView,
+    ConversionStatusView
 )
 
 urlpatterns = [
@@ -37,4 +43,16 @@ urlpatterns = [
     
     path('permissions/', PermissionListView.as_view(), name='permission-list'),
     path('permissions/<int:pk>/', PermissionDetailView.as_view(), name='permission-detail'),
+    
+    # 文件上传和存储
+    path('files/upload/', FileUploadView.as_view(), name='file-upload'),
+    path('files/upload-multiple/', FileUploadMultipleView.as_view(), name='file-upload-multiple'),
+    path('files/<str:md5_hash>/', FileAccessView.as_view(), name='file-access'),
+    path('files/info/<int:file_id>/', FileInfoView.as_view(), name='file-info'),
+    
+    # 文档附件
+    path('documents/<int:document_id>/attachments/', DocumentAttachmentListView.as_view(), name='document-attachments'),
+    
+    # 转换状态
+    path('conversions/<int:conversion_id>/', ConversionStatusView.as_view(), name='conversion-status'),
 ]

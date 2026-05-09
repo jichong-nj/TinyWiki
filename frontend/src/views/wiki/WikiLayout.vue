@@ -205,6 +205,31 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import axios from '../../axios'
+import { marked } from 'marked'
+import Prism from 'prismjs'
+import 'prismjs/components/prism-json'
+import 'prismjs/components/prism-python'
+import 'prismjs/components/prism-javascript'
+import 'prismjs/components/prism-typescript'
+import 'prismjs/components/prism-css'
+import 'prismjs/components/prism-bash'
+import 'prismjs/components/prism-sql'
+import 'prismjs/components/prism-markdown'
+import 'prismjs/components/prism-yaml'
+import 'prismjs/components/prism-go'
+
+// 配置marked
+marked.setOptions({
+  breaks: true,
+  gfm: true
+})
+
+// 高亮代码块
+const highlightCode = () => {
+  nextTick(() => {
+    Prism.highlightAll()
+  })
+}
 
 interface KnowledgeBase {
   id: number
@@ -405,38 +430,33 @@ const loadFileContent = async (fileId: number) => {
     const content = response.data.content || ''
     renderedContent.value = markdownToHtml(content)
     extractToc(content)
+    highlightCode() // 高亮代码块
   } catch (error) {
     console.error('Failed to load file content:', error)
   }
 }
 
+// 创建自定义渲染器
+const renderer = new marked.Renderer()
+const headings: TocItem[] = []
+
+// 重写标题渲染，添加id并收集标题
+renderer.heading = function({ text, depth, raw }: any) {
+  const id = `h-${raw.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]/g, '')}`
+  headings.push({ id, text, level: depth })
+  return `<h${depth} id="${id}">${text}</h${depth}>`
+}
+
 const markdownToHtml = (content: string): string => {
-  let html = content
-    .replace(/^#{3}\s+(.*$)/gim, '<h3 id="h-$1">$1</h3>')
-    .replace(/^#{2}\s+(.*$)/gim, '<h2 id="h-$1">$1</h2>')
-    .replace(/^#{1}\s+(.*$)/gim, '<h1 id="h-$1">$1</h1>')
-    .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-    .replace(/`([^`]+)`/gim, '<code>$1</code>')
-    .replace(/```(\w+)?\n([\s\S]*?)```/gim, '<pre><code>$2</code></pre>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank">$1</a>')
-    .replace(/\n/gim, '<br>')
+  headings.length = 0 // 清空标题数组
+  const html = marked.parse(content, { renderer }) as string
+  tocItems.value = headings.filter(h => h.level <= 3) // 只保留h1-h3
   return html
 }
 
-const extractToc = (content: string) => {
-  const toc: TocItem[] = []
-  const headingRegex = /^(#{1,3})\s+(.*)$/gim
-  let match
-  
-  while ((match = headingRegex.exec(content)) !== null) {
-    const level = match[1].length
-    const text = match[2]
-    const id = `h-${text}`
-    toc.push({ id, text, level })
-  }
-  
-  tocItems.value = toc
+const extractToc = (_content: string) => {
+  // 提取目录的逻辑已经移到markdownToHtml中了
+  // 这里保留函数名避免引用错误
 }
 
 const scrollToHeading = (id: string) => {
@@ -1150,5 +1170,192 @@ watch(selectedDirectory, () => {
 .result-date {
   display: flex;
   align-items: center;
+}
+
+/* Prism.js 代码高亮样式 */
+pre[class*="language-"] {
+  background: #2d2d2d;
+  padding: 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+code[class*="language-"],
+pre[class*="language-"] {
+  color: #ccc;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', 'Andale Mono', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.token.comment,
+.token.block-comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #999;
+}
+
+.token.punctuation {
+  color: #ccc;
+}
+
+.token.tag,
+.token.attr-name,
+.token.namespace,
+.token.deleted {
+  color: #e2777a;
+}
+
+.token.function-name {
+  color: #6196cc;
+}
+
+.token.boolean,
+.token.number,
+.token.function {
+  color: #f08d49;
+}
+
+.token.property,
+.token.class-name,
+.token.constant,
+.token.symbol {
+  color: #f8c555;
+}
+
+.token.selector,
+.token.important,
+.token.atrule,
+.token.keyword,
+.token.builtin {
+  color: #cc99cd;
+}
+
+.token.string,
+.token.char,
+.token.attr-value,
+.token.regex,
+.token.variable {
+  color: #7ec699;
+}
+
+.token.operator,
+.token.entity,
+.token.url {
+  color: #67cdcc;
+}
+
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+.token.entity {
+  cursor: help;
+}
+
+.token.inserted {
+  color: green;
+}
+
+/* 修正markdown内容样式 */
+.document-content h1,
+.document-content h2,
+.document-content h3 {
+  margin-top: 24px;
+  margin-bottom: 12px;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.document-content h1 {
+  font-size: 28px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #3498db;
+}
+
+.document-content h2 {
+  font-size: 22px;
+}
+
+.document-content h3 {
+  font-size: 18px;
+}
+
+.document-content p {
+  margin: 12px 0;
+  line-height: 1.8;
+}
+
+.document-content ul,
+.document-content ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.document-content li {
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.document-content a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+.document-content a:hover {
+  text-decoration: underline;
+}
+
+.document-content code {
+  background: #f4f4f4;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-size: 14px;
+}
+
+.document-content pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.document-content blockquote {
+  border-left: 4px solid #3498db;
+  padding-left: 16px;
+  margin: 16px 0;
+  color: #6c757d;
+  background: #f8f9fa;
+  padding: 12px 16px;
+  border-radius: 0 4px 4px 0;
+}
+
+.document-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.document-content th,
+.document-content td {
+  border: 1px solid #ddd;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.document-content th {
+  background: #f8f9fa;
+  font-weight: 600;
+}
+
+.document-content img {
+  max-width: 100%;
+  border-radius: 4px;
 }
 </style>

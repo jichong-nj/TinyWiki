@@ -112,6 +112,18 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# 存储系统配置
+STORAGE_ROOT = BASE_DIR / 'storage'
+STORAGE_TYPES = ['original', 'converted', 'attachments', 'chunks', 'embeddings', 'thumbnails']
+
+# 确保存储目录存在
+for storage_type in STORAGE_TYPES:
+    storage_dir = STORAGE_ROOT / storage_type
+    storage_dir.mkdir(parents=True, exist_ok=True)
+
+# 存储文件访问URL前缀
+STORAGE_FILE_URL = 'http://localhost:8080/storage/files/'
+
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

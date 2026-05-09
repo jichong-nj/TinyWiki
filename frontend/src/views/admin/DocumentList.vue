@@ -175,7 +175,7 @@
           :headers="uploadHeaders"
           :data="uploadData"
           :multiple="true"
-          accept=".md"
+          accept=".md,.txt,.docx,.doc"
           :auto-upload="false"
           :on-change="handleFileChange"
           :on-success="handleUploadSuccess"
@@ -184,13 +184,13 @@
         >
           <el-button type="primary" icon="Upload">选择文件</el-button>
           <template #tip>
-            <div class="el-upload__tip">支持 .md 格式文件，可多选</div>
+            <div class="el-upload__tip">支持 .md, .txt, .docx, .doc 格式文件，可多选</div>
           </template>
         </el-upload>
         
         <div v-if="importFiles.length > 0" class="file-list">
           <div v-for="(file, index) in importFiles" :key="index" class="file-item">
-            <el-icon class="file-icon"><File /></el-icon>
+            <el-icon class="file-icon"><Files /></el-icon>
             <span class="file-name">{{ file.name }}</span>
             <el-button type="text" size="small" @click="removeImportFile(index)">移除</el-button>
           </div>
@@ -198,7 +198,7 @@
       </div>
       <template #footer>
         <el-button @click="cancelImport">取消</el-button>
-        <el-button type="primary" @click="startUpload">开始导入</el-button>
+        <el-button type="primary" @click="startUpload" :loading="uploading">开始导入</el-button>
       </template>
     </el-dialog>
   </div>
@@ -208,7 +208,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
-import { MoreFilled, FolderOpened, Plus, Document, ArrowRight } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files } from '@element-plus/icons-vue'
 
 interface Document {
   id: number
@@ -232,8 +233,6 @@ interface Folder {
   parent: number | null
 }
 
-
-
 const router = useRouter()
 
 const documents = ref<Document[]>([])
@@ -253,8 +252,9 @@ const newSubfolderName = ref('')
 const showImportDialog = ref(false)
 const importFiles = ref<File[]>([])
 const uploadRef = ref()
+const uploading = ref(false)
 
-const uploadUrl = computed(() => '/documents/documents/')
+const uploadUrl = computed(() => '/documents/files/upload-multiple/')
 const uploadHeaders = computed(() => {
   const token = localStorage.getItem('accessToken')
   return { Authorization: `Bearer ${token}` }
@@ -329,8 +329,6 @@ function loadDirectories() {
     })
     .catch(error => console.error('加载目录失败:', error))
 }
-
-
 
 function selectDirectory(id: number) {
   selectedDirectory.value = id
@@ -448,12 +446,12 @@ function createSubfolder() {
   }
   
   axios.post('/documents/folders/', data)
-  .then(() => {
-    loadFolders()
-    showSubfolderDialog.value = false
-    newSubfolderName.value = ''
-  })
-  .catch(error => console.error('创建子文件夹失败:', error))
+    .then(() => {
+      loadFolders()
+      showSubfolderDialog.value = false
+      newSubfolderName.value = ''
+    })
+    .catch(error => console.error('创建子文件夹失败:', error))
 }
 
 function cancelCreateSubfolder() {
@@ -488,33 +486,43 @@ function removeImportFile(index: number) {
   importFiles.value.splice(index, 1)
 }
 
-function startUpload() {
+async function startUpload() {
   if (importFiles.value.length === 0) {
     return
   }
   
-  importFiles.value.forEach(file => {
+  uploading.value = true
+  
+  try {
     const formData = new FormData()
-    formData.append('file', file)
+    importFiles.value.forEach(file => {
+      formData.append('files', file)
+    })
+    
     if (selectedFolder.value) {
-      formData.append('folder', selectedFolder.value.toString())
+      formData.append('folder_id', selectedFolder.value.toString())
     } else if (selectedDirectory.value) {
-      formData.append('directory', selectedDirectory.value.toString())
+      formData.append('directory_id', selectedDirectory.value.toString())
     }
     
-    axios.post('/documents/documents/', formData, {
+    const response = await axios.post('/documents/files/upload-multiple/', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
         'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
       }
     })
-    .then(() => {
-      loadDocuments()
-    })
-    .catch(error => console.error('导入文件失败:', error))
-  })
-  
-  cancelImport()
+    
+    const successCount = response.data.files.filter((f: any) => f.status).length
+    ElMessage.success(`成功导入 ${successCount}/${importFiles.value.length} 个文件`)
+    
+    loadDocuments()
+  } catch (error) {
+    console.error('导入文件失败:', error)
+    ElMessage.error('导入文件失败')
+  } finally {
+    uploading.value = false
+    cancelImport()
+  }
 }
 
 function handleUploadSuccess() {

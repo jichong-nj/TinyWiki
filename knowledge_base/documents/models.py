@@ -169,3 +169,7 @@ class Permission(models.Model):
     
     class Meta:
         unique_together = ('user', 'directory')
+
+
+# 导入存储相关模型
+from .storage_models import FileStorage, FileAttachment, DocumentConversion

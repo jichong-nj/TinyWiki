@@ -513,3 +513,242 @@ class VectorSearchView(APIView):
         results.sort(key=lambda x: x['similarity'], reverse=True)
         
         return Response(results[:top_k])
+
+
+from .storage_service import StorageService
+from .document_converter import DocumentConverter
+from .storage_models import FileStorage, FileAttachment, DocumentConversion
+from django.conf import settings
+from django.http import FileResponse
+import os
+
+
+class FileUploadView(APIView):
+    """文件上传API"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        if 'file' not in request.FILES:
+            return Response({'error': '没有文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        file_obj = request.FILES['file']
+        document_id = request.data.get('document_id')
+        directory_id = request.data.get('directory_id')
+        folder_id = request.data.get('folder_id')
+        create_document = request.data.get('create_document', True)
+        
+        # 获取文档对象
+        document = None
+        if document_id:
+            try:
+                document = Document.objects.get(id=document_id)
+            except Document.DoesNotExist:
+                return Response({'error': '文档不存在'}, status=status.HTTP_404_NOT_FOUND)
+        elif create_document:
+            # 创建新文档
+            filename = file_obj.name
+            title = filename.rsplit('.', 1)[0] if '.' in filename else filename
+            
+            data = {
+                'title': title,
+                'filename': filename,
+                'content': '',
+                'directory': directory_id,
+                'folder': folder_id
+            }
+            
+            serializer = DocumentSerializer(data=data)
+            if serializer.is_valid():
+                document = serializer.save()
+                DocumentVersion.objects.create(
+                    document=document,
+                    version_number=1,
+                    content='',
+                    modified_by=request.user
+                )
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 保存原始文件
+        file_storage = StorageService.save_file(
+            file_obj=file_obj,
+            storage_type='original',
+            document=document,
+            original_name=file_obj.name
+        )
+        
+        # 开始转换
+        result = DocumentConverter.convert_async(file_storage.id)
+        
+        return Response({
+            'file_id': file_storage.id,
+            'md5': file_storage.md5_hash,
+            'file_name': file_storage.file_name,
+            'status': result.get('success', False),
+            'conversion_result': result,
+            'document_id': document.id if document else None
+        })
+
+
+class FileUploadMultipleView(APIView):
+    """批量文件上传API"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        if 'files' not in request.FILES:
+            return Response({'error': '没有文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        files = request.FILES.getlist('files')
+        document_id = request.data.get('document_id')
+        directory_id = request.data.get('directory_id')
+        folder_id = request.data.get('folder_id')
+        create_document = request.data.get('create_document', True)
+        
+        results = []
+        for file_obj in files:
+            # 获取文档对象
+            document = None
+            if document_id:
+                try:
+                    document = Document.objects.get(id=document_id)
+                except Document.DoesNotExist:
+                    continue
+            elif create_document:
+                # 创建新文档
+                filename = file_obj.name
+                title = filename.rsplit('.', 1)[0] if '.' in filename else filename
+                
+                data = {
+                    'title': title,
+                    'filename': filename,
+                    'content': '',
+                    'directory': directory_id,
+                    'folder': folder_id
+                }
+                
+                serializer = DocumentSerializer(data=data)
+                if serializer.is_valid():
+                    document = serializer.save()
+                    DocumentVersion.objects.create(
+                        document=document,
+                        version_number=1,
+                        content='',
+                        modified_by=request.user
+                    )
+                else:
+                    continue
+            
+            # 保存原始文件
+            file_storage = StorageService.save_file(
+                file_obj=file_obj,
+                storage_type='original',
+                document=document,
+                original_name=file_obj.name
+            )
+            
+            # 开始转换
+            conversion_result = DocumentConverter.convert_async(file_storage.id)
+            
+            results.append({
+                'file_id': file_storage.id,
+                'md5': file_storage.md5_hash,
+                'file_name': file_storage.file_name,
+                'status': conversion_result.get('success', False),
+                'document_id': document.id if document else None
+            })
+        
+        return Response({'files': results})
+
+
+class FileAccessView(APIView):
+    """文件访问API"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, md5_hash):
+        file_storage = StorageService.get_file(md5_hash)
+        if not file_storage:
+            return Response({'error': '文件不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        file_path = file_storage.full_path
+        if not os.path.exists(file_path):
+            return Response({'error': '文件不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        return FileResponse(
+            open(file_path, 'rb'),
+            filename=file_storage.file_name,
+            content_type=file_storage.mime_type or 'application/octet-stream'
+        )
+
+
+class FileInfoView(APIView):
+    """文件信息API"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, file_id):
+        file_storage = StorageService.get_file_by_id(file_id)
+        if not file_storage:
+            return Response({'error': '文件不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({
+            'id': file_storage.id,
+            'md5_hash': file_storage.md5_hash,
+            'file_name': file_storage.file_name,
+            'file_size': file_storage.file_size,
+            'file_type': file_storage.file_type,
+            'mime_type': file_storage.mime_type,
+            'storage_type': file_storage.storage_type,
+            'file_url': file_storage.file_url,
+            'created_at': file_storage.created_at,
+            'updated_at': file_storage.updated_at,
+            'document_id': file_storage.document_id
+        })
+
+
+class DocumentAttachmentListView(APIView):
+    """文档附件列表API"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, document_id):
+        try:
+            document = Document.objects.get(id=document_id)
+        except Document.DoesNotExist:
+            return Response({'error': '文档不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        attachments = FileAttachment.objects.filter(document=document)
+        
+        return Response([{
+            'id': attachment.id,
+            'original_name': attachment.original_name,
+            'description': attachment.description,
+            'position': attachment.position,
+            'created_at': attachment.created_at,
+            'file_id': attachment.file_storage.id,
+            'file_url': attachment.file_storage.file_url,
+            'file_name': attachment.file_storage.file_name,
+            'file_size': attachment.file_storage.file_size
+        } for attachment in attachments])
+
+
+class ConversionStatusView(APIView):
+    """转换状态查询API"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, conversion_id):
+        try:
+            conversion = DocumentConversion.objects.get(id=conversion_id)
+        except DocumentConversion.DoesNotExist:
+            return Response({'error': '转换记录不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({
+            'id': conversion.id,
+            'status': conversion.status,
+            'original_file_id': conversion.original_file.id,
+            'original_file_name': conversion.original_file.file_name,
+            'converted_file_id': conversion.converted_file.id if conversion.converted_file else None,
+            'converted_file_name': conversion.converted_file.file_name if conversion.converted_file else None,
+            'error_message': conversion.error_message,
+            'conversion_info': conversion.conversion_info,
+            'started_at': conversion.started_at,
+            'completed_at': conversion.completed_at,
+            'created_at': conversion.created_at
+        })
