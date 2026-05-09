@@ -107,7 +107,7 @@ onMounted(() => {
 <style scoped>
 .admin-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
   background: #f5f5f5;
 }
 
@@ -117,6 +117,11 @@ onMounted(() => {
   color: white;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  overflow-y: auto;
 }
 
 .logo {
@@ -165,8 +170,9 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh;
   overflow: hidden;
+  margin-left: 200px;
 }
 
 .router-view-content {
