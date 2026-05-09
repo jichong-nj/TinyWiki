@@ -76,4 +76,27 @@ const handleSave = () => {
   height: 100%;
   min-height: 600px;
 }
+
+.md-editor-wrapper :deep(.v-md-editor__split) {
+  display: flex;
+}
+
+.md-editor-wrapper :deep(.v-md-editor__left) {
+  border-right: 2px solid #3498db !important;
+}
+
+.md-editor-wrapper :deep(.v-md-editor__right) {
+  border-left: 1px solid #e9ecef;
+}
+
+.md-editor-wrapper :deep(.v-md-editor__resize-bar) {
+  background: #3498db !important;
+  width: 6px !important;
+  cursor: col-resize;
+  opacity: 1 !important;
+}
+
+.md-editor-wrapper :deep(.v-md-editor__resize-bar:hover) {
+  background: #1976d2 !important;
+}
 </style>

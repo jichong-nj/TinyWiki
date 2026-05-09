@@ -3,8 +3,9 @@
     <div class="list-header">
       <div class="breadcrumb-section">
         <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ path: '/' }">知识库</el-breadcrumb-item>
-          <el-breadcrumb-item v-if="selectedDirectory">{{ getCurrentDirectoryName() }}</el-breadcrumb-item>
+          <el-breadcrumb-item v-if="selectedDirectory">
+            <span @click="selectDirectory(selectedDirectory)">{{ getCurrentDirectoryName() }}</span>
+          </el-breadcrumb-item>
           <el-breadcrumb-item v-for="(folder, index) in breadcrumbFolders" :key="folder.id">
             <span @click="navigateToFolder(index)">{{ folder.name }}</span>
           </el-breadcrumb-item>
@@ -609,6 +610,30 @@ onMounted(() => {
 
 .breadcrumb-section {
   flex: 1;
+}
+
+.breadcrumb-section :deep(.el-breadcrumb__item) {
+  cursor: pointer;
+}
+
+.breadcrumb-section :deep(.el-breadcrumb__item a) {
+  cursor: pointer;
+  color: #666;
+  transition: color 0.2s;
+}
+
+.breadcrumb-section :deep(.el-breadcrumb__item a:hover) {
+  color: #3498db;
+}
+
+.breadcrumb-section :deep(.el-breadcrumb__item span) {
+  cursor: pointer;
+  color: #666;
+  transition: color 0.2s;
+}
+
+.breadcrumb-section :deep(.el-breadcrumb__item span:hover) {
+  color: #3498db;
 }
 
 .stats-section {
