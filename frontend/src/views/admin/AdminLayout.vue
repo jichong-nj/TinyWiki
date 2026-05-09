@@ -40,12 +40,6 @@
           <el-input v-model="searchQuery" placeholder="搜索文档" prefix-icon="Search" />
         </div>
         <div class="header-right">
-          <el-badge :value="draftCount" class="draft-badge">
-            <el-button text>未发布</el-button>
-          </el-badge>
-          <el-badge :value="pendingCount" class="pending-badge">
-            <el-button text>待分析</el-button>
-          </el-badge>
           <el-dropdown>
             <el-button text>
               {{ authStore.user?.username }}
@@ -86,8 +80,6 @@ const authStore = useAuthStore()
 const knowledgeBases = ref<KnowledgeBase[]>([])
 const currentKnowledgeBase = ref<number | null>(null)
 const searchQuery = ref('')
-const draftCount = ref(0)
-const pendingCount = ref(0)
 
 const activeMenu = computed(() => route.path)
 
@@ -111,27 +103,8 @@ function loadKnowledgeBases() {
     .catch(error => console.error('加载知识库失败:', error))
 }
 
-function loadStats() {
-  axios.get('/documents/documents/', {
-    params: {
-      publish_status: 'draft'
-    }
-  }).then(response => {
-    draftCount.value = response.data.length
-  })
-  
-  axios.get('/documents/documents/', {
-    params: {
-      analysis_status: 'analyzing'
-    }
-  }).then(response => {
-    pendingCount.value = response.data.length
-  })
-}
-
 onMounted(() => {
   loadKnowledgeBases()
-  loadStats()
 })
 </script>
 
@@ -224,11 +197,5 @@ onMounted(() => {
   gap: 15px;
 }
 
-.draft-badge :deep(.el-badge__content) {
-  background: #f56c6c;
-}
 
-.pending-badge :deep(.el-badge__content) {
-  background: #e6a23c;
-}
 </style>
