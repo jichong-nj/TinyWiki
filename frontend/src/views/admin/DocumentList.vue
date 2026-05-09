@@ -43,33 +43,62 @@
         </div>
       </div>
       
-      <div class="document-table">
-        <el-table :data="documents" border>
-          <el-table-column prop="title" label="标题" />
-          <el-table-column prop="filename" label="文件名" />
-          <el-table-column prop="publish_status" label="发布状态">
-            <template #default="scope">
-              <el-tag :type="scope.row.publish_status === 'published' ? 'success' : 'warning'">
-                {{ scope.row.publish_status === 'published' ? '已发布' : '未发布' }}
+      <div class="document-list-container">
+        <div class="list-header-row">
+          <span class="total-count">共 {{ documents.length }} 个文档</span>
+          <div class="header-actions">
+            <el-button type="primary" @click="createDocument">创建文档</el-button>
+            <el-dropdown trigger="click">
+              <el-button type="text">
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item>批量删除</el-dropdown-item>
+                  <el-dropdown-item>导出</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+        
+        <div class="document-items">
+          <div 
+            v-for="doc in documents" 
+            :key="doc.id" 
+            class="document-item"
+          >
+            <div class="item-left">
+              <el-icon class="doc-icon"><Document /></el-icon>
+              <span class="doc-name">{{ doc.filename }}</span>
+            </div>
+            
+            <div class="item-center">
+              <el-tag :type="doc.publish_status === 'published' ? 'success' : 'warning'" size="small">
+                {{ doc.publish_status === 'published' ? '已发布' : '未发布' }}
               </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="analysis_status" label="分析状态">
-            <template #default="scope">
-              <el-tag :type="getAnalysisTagType(scope.row.analysis_status)">
-                {{ getAnalysisStatusText(scope.row.analysis_status) }}
+              <el-tag :type="getAnalysisTagType(doc.analysis_status)" size="small">
+                {{ getAnalysisStatusText(doc.analysis_status) }}
               </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="updated_at" label="更新时间" />
-          <el-table-column label="操作">
-            <template #default="scope">
-              <el-button text @click="editDocument(scope.row.id)">编辑</el-button>
-              <el-button text type="danger" @click="deleteDocument(scope.row.id)">删除</el-button>
-              <el-button v-if="scope.row.publish_status === 'draft'" text type="primary" @click="publishDocument(scope.row.id)">发布</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+            </div>
+            
+            <div class="item-right">
+              <span class="update-time">{{ doc.updated_at }}</span>
+              <el-dropdown trigger="click">
+                <el-button type="text" class="menu-btn">
+                  <el-icon><MoreFilled /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="editDocument(doc.id)">编辑</el-dropdown-item>
+                    <el-dropdown-item @click="deleteDocument(doc.id)">删除</el-dropdown-item>
+                    <el-dropdown-item v-if="doc.publish_status === 'draft'" @click="publishDocument(doc.id)">发布</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -91,7 +120,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
-import { MoreFilled, FolderOpened, Plus } from '@element-plus/icons-vue'
+import { MoreFilled, FolderOpened, Plus, Document } from '@element-plus/icons-vue'
 
 interface Document {
   id: number
@@ -375,10 +404,102 @@ onMounted(() => {
   margin-right: 4px;
 }
 
-.document-table {
+.document-list-container {
   flex: 1;
   background: white;
   border-radius: 8px;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.list-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.total-count {
+  font-size: 14px;
+  color: #666;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.document-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.document-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.document-item:hover {
+  background-color: #f5f7fa;
+}
+
+.item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.doc-icon {
+  color: #1890ff;
+  font-size: 16px;
+}
+
+.doc-name {
+  font-size: 14px;
+  color: #333;
+}
+
+.item-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 2;
+  justify-content: center;
+}
+
+.item-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.update-time {
+  font-size: 12px;
+  color: #999;
+}
+
+.menu-btn {
+  padding: 4px;
+  color: #999;
+  opacity: 0;
+}
+
+.document-item:hover .menu-btn {
+  opacity: 1;
+}
+
+.menu-btn:hover {
+  color: #666;
 }
 </style>
