@@ -51,19 +51,7 @@ const routes: RouteRecordRaw[] = [
     path: '/wiki',
     name: 'Wiki',
     component: () => import('../views/wiki/WikiLayout.vue'),
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        name: 'WikiHome',
-        component: () => import('../views/wiki/WikiHome.vue')
-      },
-      {
-        path: 'document/:id',
-        name: 'WikiDocument',
-        component: () => import('../views/wiki/WikiDocument.vue')
-      }
-    ]
+    meta: { requiresAuth: true }
   }
 ]
 

@@ -2,26 +2,468 @@
   <div class="wiki-layout">
     <header class="wiki-header">
       <div class="header-left">
-        <h1>Wiki</h1>
+        <h1 class="wiki-title">📖 {{ siteName }}</h1>
+      </div>
+      <div class="header-center">
+        <select v-model="selectedKB" @change="onKBChange" class="kb-select">
+          <option :value="null">选择知识库</option>
+          <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb">
+            {{ kb.name }}
+          </option>
+        </select>
       </div>
       <div class="header-right">
-        <el-button @click="goBack">返回管理</el-button>
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            placeholder="搜索文档..."
+            @keyup.enter="handleSearch"
+          />
+        </div>
       </div>
     </header>
-    <main class="wiki-main">
-      <router-view />
-    </main>
+
+    <div v-if="selectedKB" class="wiki-content">
+      <nav class="directory-tabs">
+        <div 
+          v-for="dir in directories" 
+          :key="dir.id"
+          class="tab-item"
+          :class="{ active: selectedDirectory?.id === dir.id }"
+          @click="selectDirectory(dir)"
+        >
+          {{ dir.name }}
+        </div>
+      </nav>
+
+      <div class="wiki-main-content">
+        <aside class="sidebar">
+          <div class="sidebar-header">
+            <span class="sidebar-title">文件目录</span>
+            <button class="sidebar-refresh" @click="loadTree">🔄</button>
+          </div>
+          <div class="sidebar-tree">
+            <div 
+              v-for="item in treeData" 
+              :key="item.id"
+              class="tree-node"
+            >
+              <div 
+                class="tree-item"
+                :class="{ 
+                  'is-directory': item.type === 'folder', 
+                  active: selectedFile?.id === item.id
+                }"
+                @click="handleItemClick(item)"
+              >
+                <span class="tree-icon" v-if="item.type === 'folder'">
+                  <span @click.stop="toggleExpand(item.id)">{{ item.expanded ? '▼' : '▶' }}</span>
+                </span>
+                <span class="tree-icon" v-else>📄</span>
+                <span class="tree-label">{{ item.name }}</span>
+              </div>
+              
+              <div 
+                v-if="item.type === 'folder' && item.expanded && item.children?.length" 
+                class="tree-children"
+              >
+                <div 
+                  v-for="child in item.children" 
+                  :key="child.id"
+                  class="tree-node"
+                >
+                  <div 
+                    class="tree-item"
+                    :class="{ 
+                      'is-directory': child.type === 'folder', 
+                      active: selectedFile?.id === child.id
+                    }"
+                    @click="handleItemClick(child)"
+                  >
+                    <span class="tree-icon" v-if="child.type === 'folder'">
+                      <span @click.stop="toggleExpand(child.id)">{{ child.expanded ? '▼' : '▶' }}</span>
+                    </span>
+                    <span class="tree-icon" v-else>📄</span>
+                    <span class="tree-label">{{ child.name }}</span>
+                  </div>
+                  
+                  <div 
+                    v-if="child.type === 'folder' && child.expanded && child.children?.length" 
+                    class="tree-children"
+                  >
+                    <div 
+                      v-for="subChild in child.children" 
+                      :key="subChild.id"
+                      class="tree-node"
+                    >
+                      <div 
+                        class="tree-item"
+                        :class="{ 
+                          'is-directory': subChild.type === 'folder',
+                          active: selectedFile?.id === subChild.id
+                        }"
+                        @click="handleItemClick(subChild)"
+                      >
+                        <span class="tree-icon" v-if="subChild.type === 'folder'">📁</span>
+                        <span class="tree-icon" v-else>📄</span>
+                        <span class="tree-label">{{ subChild.name }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <main class="content-area">
+          <div v-if="selectedFile" class="document-viewer">
+            <div class="document-header">
+              <div class="breadcrumbs">
+                <span v-for="(crumb, index) in breadcrumbs" :key="index" class="breadcrumb-item">
+                  <a v-if="crumb.url" @click="navigateTo(crumb.url)">{{ crumb.name }}</a>
+                  <span v-else>{{ crumb.name }}</span>
+                  <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-separator">/</span>
+                </span>
+              </div>
+              <h1 class="document-title">{{ selectedFile.name }}</h1>
+              <div class="document-meta">
+                <span>📅 更新于 {{ formatTime(selectedFile.updated_at) }}</span>
+              </div>
+            </div>
+            <article class="document-content" v-html="renderedContent" @scroll="handleContentScroll"></article>
+          </div>
+          
+          <div v-else class="empty-state">
+            <span class="empty-icon">📚</span>
+            <h2>选择文档开始浏览</h2>
+            <p>从左侧目录选择一个文档进行查看</p>
+          </div>
+        </main>
+
+        <aside class="toc-panel" :class="{ collapsed: tocCollapsed }">
+          <div class="toc-header">
+            <span class="toc-title">文档目录</span>
+            <button class="toc-toggle" @click="tocCollapsed = !tocCollapsed">
+              {{ tocCollapsed ? '▶' : '◀' }}
+            </button>
+          </div>
+          <div v-if="!tocCollapsed && tocItems.length" class="toc-content">
+            <nav class="toc-nav">
+              <ul>
+                <li 
+                  v-for="(item, index) in tocItems" 
+                  :key="index"
+                  class="toc-item"
+                  :class="{ active: activeTocItem === item.id, [`level-${item.level}`]: true }"
+                  @click="scrollToHeading(item.id)"
+                >
+                  {{ item.text }}
+                </li>
+              </ul>
+            </nav>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div v-else class="no-kb-selected">
+      <div class="no-kb-content">
+        <span class="no-kb-icon">📋</span>
+        <h2>请选择一个知识库</h2>
+        <p>从顶部下拉菜单中选择要浏览的知识库</p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import axios from '../../axios'
 
-const router = useRouter()
-
-function goBack() {
-  router.push('/')
+interface KnowledgeBase {
+  id: number
+  name: string
+  description?: string
 }
+
+interface Directory {
+  id: number
+  name: string
+  knowledge_base: number
+}
+
+interface TreeItem {
+  id: number
+  name: string
+  type: 'document' | 'folder'
+  expanded?: boolean
+  children?: TreeItem[]
+  directory_id?: number
+  folder_id?: number
+  updated_at?: string
+}
+
+interface TocItem {
+  id: string
+  text: string
+  level: number
+}
+
+const siteName = ref('TinyWiki')
+const searchQuery = ref('')
+const knowledgeBases = ref<KnowledgeBase[]>([])
+const selectedKB = ref<KnowledgeBase | null>(null)
+const directories = ref<Directory[]>([])
+const selectedDirectory = ref<Directory | null>(null)
+const selectedFile = ref<{ id: number; name: string; updated_at: string; directory_id?: number; folder_id?: number } | null>(null)
+const renderedContent = ref('')
+const tocCollapsed = ref(false)
+const tocItems = ref<TocItem[]>([])
+const activeTocItem = ref('')
+
+const expandedNodes = ref(new Set<number>())
+
+const treeData = computed(() => {
+  if (!selectedDirectory.value) return []
+  
+  const buildTree = (items: any[], parentId?: number): TreeItem[] => {
+    return items
+      .filter(item => item.parent === parentId)
+      .map(item => ({
+        id: item.id,
+        name: item.name,
+        type: item.type === 'folder' ? 'folder' : 'document',
+        expanded: expandedNodes.value.has(item.id),
+        children: item.type === 'folder' ? buildTree(items, item.id) : undefined,
+        directory_id: item.directory_id,
+        folder_id: item.folder_id,
+        updated_at: item.updated_at
+      }))
+  }
+  
+  return buildTree(currentTreeItems.value)
+})
+
+const currentTreeItems = ref<any[]>([])
+
+const breadcrumbs = computed(() => {
+  if (!selectedFile.value) return []
+  
+  const crumbs = []
+  
+  if (selectedKB.value) {
+    crumbs.push({ name: selectedKB.value.name, url: null })
+  }
+  
+  if (selectedDirectory.value) {
+    crumbs.push({ name: selectedDirectory.value.name, url: null })
+  }
+  
+  if (selectedFile.value) {
+    crumbs.push({ name: selectedFile.value.name, url: null })
+  }
+  
+  return crumbs
+})
+
+onMounted(async () => {
+  await loadKnowledgeBases()
+})
+
+const loadKnowledgeBases = async () => {
+  try {
+    const response = await axios.get('/documents/knowledge-bases/')
+    knowledgeBases.value = response.data
+    if (knowledgeBases.value.length > 0) {
+      selectedKB.value = knowledgeBases.value[0]
+    }
+  } catch (error) {
+    console.error('Failed to load knowledge bases:', error)
+  }
+}
+
+const onKBChange = async () => {
+  selectedDirectory.value = null
+  selectedFile.value = null
+  renderedContent.value = ''
+  tocItems.value = []
+  if (selectedKB.value) {
+    await loadDirectories()
+  }
+}
+
+const loadDirectories = async () => {
+  if (!selectedKB.value) return
+  
+  try {
+    const response = await axios.get('/documents/directories/', {
+      params: { knowledge_base: selectedKB.value.id }
+    })
+    directories.value = response.data
+    if (directories.value.length > 0) {
+      selectedDirectory.value = directories.value[0]
+    }
+  } catch (error) {
+    console.error('Failed to load directories:', error)
+  }
+}
+
+const selectDirectory = async (dir: Directory) => {
+  selectedDirectory.value = dir
+  selectedFile.value = null
+  renderedContent.value = ''
+  tocItems.value = []
+  await loadTree()
+}
+
+const loadTree = async () => {
+  if (!selectedKB.value) return
+  
+  try {
+    const response = await axios.get(`/documents/knowledge-bases/${selectedKB.value.id}/tree/`)
+    const flatItems: any[] = []
+    
+    const flatten = (items: any[], parentId?: number) => {
+      items.forEach(item => {
+        flatItems.push({
+          id: item.id,
+          name: item.name,
+          type: item.type,
+          parent: parentId,
+          directory_id: selectedDirectory.value?.id,
+          folder_id: item.type === 'folder' ? item.id : undefined,
+          updated_at: item.updated_at
+        })
+        
+        if (item.children?.length) {
+          flatten(item.children, item.id)
+        }
+      })
+    }
+    
+    const filtered = response.data.filter((d: any) => d.id === selectedDirectory.value?.id)
+    filtered.forEach((d: any) => flatten(d.children || []))
+    currentTreeItems.value = flatItems
+  } catch (error) {
+    console.error('Failed to load tree:', error)
+  }
+}
+
+const toggleExpand = (id: number) => {
+  if (expandedNodes.value.has(id)) {
+    expandedNodes.value.delete(id)
+  } else {
+    expandedNodes.value.add(id)
+  }
+}
+
+const handleItemClick = async (item: TreeItem) => {
+  if (item.type === 'document') {
+    selectedFile.value = {
+      id: item.id,
+      name: item.name,
+      updated_at: item.updated_at || '',
+      directory_id: item.directory_id,
+      folder_id: item.folder_id
+    }
+    await loadFileContent(item.id)
+  } else if (item.type === 'folder') {
+    toggleExpand(item.id)
+  }
+}
+
+const loadFileContent = async (fileId: number) => {
+  try {
+    const response = await axios.get(`/documents/documents/${fileId}/`)
+    const content = response.data.content || ''
+    renderedContent.value = markdownToHtml(content)
+    extractToc(content)
+  } catch (error) {
+    console.error('Failed to load file content:', error)
+  }
+}
+
+const markdownToHtml = (content: string): string => {
+  let html = content
+    .replace(/^#{3}\s+(.*$)/gim, '<h3 id="h-$1">$1</h3>')
+    .replace(/^#{2}\s+(.*$)/gim, '<h2 id="h-$1">$1</h2>')
+    .replace(/^#{1}\s+(.*$)/gim, '<h1 id="h-$1">$1</h1>')
+    .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+    .replace(/`([^`]+)`/gim, '<code>$1</code>')
+    .replace(/```(\w+)?\n([\s\S]*?)```/gim, '<pre><code>$2</code></pre>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank">$1</a>')
+    .replace(/\n/gim, '<br>')
+  return html
+}
+
+const extractToc = (content: string) => {
+  const toc: TocItem[] = []
+  const headingRegex = /^(#{1,3})\s+(.*)$/gim
+  let match
+  
+  while ((match = headingRegex.exec(content)) !== null) {
+    const level = match[1].length
+    const text = match[2]
+    const id = `h-${text}`
+    toc.push({ id, text, level })
+  }
+  
+  tocItems.value = toc
+}
+
+const scrollToHeading = (id: string) => {
+  const element = document.getElementById(id)
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
+const handleContentScroll = () => {
+  const headings = document.querySelectorAll('h1, h2, h3')
+  let currentHeading = ''
+  
+  headings.forEach((heading) => {
+    const rect = heading.getBoundingClientRect()
+    if (rect.top <= 100) {
+      currentHeading = heading.id
+    }
+  })
+  
+  activeTocItem.value = currentHeading
+}
+
+const handleSearch = () => {
+  if (!searchQuery.value.trim()) return
+  console.log('Search:', searchQuery.value)
+}
+
+const formatTime = (dateString?: string) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+}
+
+const navigateTo = (url: string | null) => {
+  if (url) {
+    console.log('Navigate to:', url)
+  }
+}
+
+watch(selectedKB, () => {
+  loadDirectories()
+})
+
+watch(selectedDirectory, () => {
+  loadTree()
+})
 </script>
 
 <style scoped>
@@ -29,24 +471,503 @@ function goBack() {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background: #f8f9fa;
 }
 
 .wiki-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  background: #fff;
-  border-bottom: 1px solid #eee;
+  padding: 12px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e9ecef;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.header-left h1 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.wiki-main {
+.header-left {
   flex: 1;
-  overflow: auto;
+}
+
+.wiki-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.header-center {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+}
+
+.kb-select {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+  min-width: 200px;
+}
+
+.header-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  background: #f1f3f4;
+  border-radius: 24px;
+  padding: 8px 16px;
+  width: 300px;
+}
+
+.search-icon {
+  font-size: 14px;
+  margin-right: 10px;
+}
+
+.search-box input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #2c3e50;
+}
+
+.search-box input::placeholder {
+  color: #95a5a6;
+}
+
+.directory-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e9ecef;
+  overflow-x: auto;
+}
+
+.tab-item {
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #6c757d;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.tab-item:hover {
+  background: #f1f3f4;
+  color: #2c3e50;
+}
+
+.tab-item.active {
+  background: #3498db;
+  color: white;
+}
+
+.wiki-main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 280px;
+  background: #ffffff;
+  border-right: 1px solid #e9ecef;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+.sidebar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.sidebar-refresh {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.sidebar-refresh:hover {
+  background: #e9ecef;
+}
+
+.sidebar-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.tree-node {
+  user-select: none;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 13px;
+}
+
+.tree-item:hover {
+  background: #f1f3f4;
+}
+
+.tree-item.active {
+  background: #e3f2fd;
+}
+
+.tree-item.active .tree-label {
+  color: #1976d2;
+  font-weight: 500;
+}
+
+.tree-icon {
+  font-size: 12px;
+  color: #6c757d;
+  flex-shrink: 0;
+}
+
+.tree-label {
+  color: #2c3e50;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-children {
+  padding-left: 16px;
+}
+
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.document-viewer {
+  max-width: 900px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.document-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e9ecef;
+  background: #fafafa;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #6c757d;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+}
+
+.breadcrumb-item a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+.breadcrumb-item a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-separator {
+  margin: 0 4px;
+}
+
+.document-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+}
+
+.document-meta {
+  font-size: 13px;
+  color: #6c757d;
+}
+
+.document-content {
+  padding: 24px;
+  line-height: 1.8;
+  color: #333;
+  max-height: calc(100vh - 320px);
+  overflow-y: auto;
+}
+
+.document-content h1 {
+  font-size: 24px;
+  margin: 24px 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #3498db;
+  color: #2c3e50;
+}
+
+.document-content h2 {
+  font-size: 20px;
+  margin: 20px 0 12px 0;
+  color: #2c3e50;
+}
+
+.document-content h3 {
+  font-size: 16px;
+  margin: 16px 0 10px 0;
+  color: #2c3e50;
+}
+
+.document-content p {
+  margin: 12px 0;
+}
+
+.document-content ul,
+.document-content ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.document-content li {
+  margin: 6px 0;
+}
+
+.document-content a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+.document-content a:hover {
+  text-decoration: underline;
+}
+
+.document-content code {
+  background: #f4f4f4;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 14px;
+}
+
+.document-content pre {
+  background: #2d2d2d;
+  color: #ccc;
+  padding: 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.document-content pre code {
+  background: none;
+  padding: 0;
+  color: #ccc;
+}
+
+.document-content blockquote {
+  border-left: 4px solid #3498db;
+  padding-left: 16px;
+  margin: 16px 0;
+  color: #6c757d;
+  background: #f8f9fa;
+  padding: 12px 16px;
+  border-radius: 0 4px 4px 0;
+}
+
+.document-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.document-content th,
+.document-content td {
+  border: 1px solid #ddd;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.document-content th {
+  background: #f8f9fa;
+  font-weight: 600;
+}
+
+.document-content img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  text-align: center;
+  color: #6c757d;
+}
+
+.empty-icon {
+  font-size: 80px;
+  margin-bottom: 24px;
+}
+
+.empty-state h2 {
+  font-size: 24px;
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+}
+
+.empty-state p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.toc-panel {
+  width: 240px;
+  background: #ffffff;
+  border-left: 1px solid #e9ecef;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s;
+}
+
+.toc-panel.collapsed {
+  width: 40px;
+}
+
+.toc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+.toc-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.toc-toggle {
+  background: none;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.toc-toggle:hover {
+  background: #e9ecef;
+}
+
+.toc-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.toc-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.toc-item {
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #6c757d;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.toc-item:hover {
+  background: #f1f3f4;
+  color: #2c3e50;
+}
+
+.toc-item.active {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.toc-item.level-2 {
+  padding-left: 20px;
+}
+
+.toc-item.level-3 {
+  padding-left: 36px;
+}
+
+.no-kb-selected {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f8f9fa;
+}
+
+.no-kb-content {
+  text-align: center;
+  color: #6c757d;
+}
+
+.no-kb-icon {
+  font-size: 80px;
+  display: block;
+  margin-bottom: 24px;
+}
+
+.no-kb-content h2 {
+  font-size: 24px;
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+}
+
+.no-kb-content p {
+  font-size: 14px;
+  margin: 0;
 }
 </style>

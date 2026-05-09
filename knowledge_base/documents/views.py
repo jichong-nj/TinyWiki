@@ -342,7 +342,8 @@ class DocumentTreeView(APIView):
                         'type': 'document',
                         'filename': doc.filename,
                         'publish_status': doc.publish_status,
-                        'analysis_status': doc.analysis_status
+                        'analysis_status': doc.analysis_status,
+                        'updated_at': doc.updated_at.isoformat()
                     })
                 tree.append(dir_data)
             return Response(tree)
@@ -367,7 +368,8 @@ class DocumentTreeView(APIView):
                     'type': 'document',
                     'filename': doc.filename,
                     'publish_status': doc.publish_status,
-                    'analysis_status': doc.analysis_status
+                    'analysis_status': doc.analysis_status,
+                    'updated_at': doc.updated_at.isoformat()
                 })
             tree.append(folder_data)
         return tree
