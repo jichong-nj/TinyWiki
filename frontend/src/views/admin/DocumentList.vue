@@ -1,11 +1,17 @@
 <template>
   <div class="document-list">
     <div class="list-header">
-      <div class="header-left">
-        <span class="stats-text">未发布{{ draftCount }}条，待分析{{ pendingAnalysisCount }}条</span>
+      <div class="breadcrumb-section">
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item :to="{ path: '/' }">知识库</el-breadcrumb-item>
+          <el-breadcrumb-item v-if="selectedDirectory">{{ getCurrentDirectoryName() }}</el-breadcrumb-item>
+          <el-breadcrumb-item v-for="(folder, index) in breadcrumbFolders" :key="folder.id">
+            <span @click="navigateToFolder(index)">{{ folder.name }}</span>
+          </el-breadcrumb-item>
+        </el-breadcrumb>
       </div>
-      <div class="header-right">
-        <el-button type="primary" @click="createDocument">创建文档</el-button>
+      <div class="stats-section">
+        <span class="stats-text">未发布{{ draftCount }}条，待分析{{ pendingAnalysisCount }}条</span>
       </div>
     </div>
     
@@ -47,13 +53,13 @@
         <div class="list-header-row">
           <span class="total-count">共 {{ documents.length }} 个文档</span>
           <div class="header-actions">
-            <el-button type="primary" @click="createDocument">创建文档</el-button>
             <el-dropdown trigger="click">
               <el-button type="text">
                 <el-icon><MoreFilled /></el-icon>
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item @click="createDocument">创建文档</el-dropdown-item>
                   <el-dropdown-item @click="showSubfolderDialog = true">创建子文件夹</el-dropdown-item>
                   <el-dropdown-item @click="showImportDialog = true">导入文件</el-dropdown-item>
                   <el-dropdown-item>批量删除</el-dropdown-item>
@@ -69,10 +75,12 @@
             v-for="folder in folders" 
             :key="folder.id" 
             class="document-item folder-item"
+            @click="drillIntoFolder(folder)"
           >
             <div class="item-left">
               <el-icon class="folder-icon"><FolderOpened /></el-icon>
               <span class="doc-name">{{ folder.name }}</span>
+              <el-icon class="arrow-icon"><ArrowRight /></el-icon>
             </div>
             
             <div class="item-center">
@@ -80,7 +88,7 @@
             
             <div class="item-right">
               <span class="update-time">-</span>
-              <el-dropdown trigger="click">
+              <el-dropdown trigger="click" @click.stop>
                 <el-button type="text" class="menu-btn">
                   <el-icon><MoreFilled /></el-icon>
                 </el-button>
@@ -198,7 +206,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
-import { MoreFilled, FolderOpened, Plus, Document } from '@element-plus/icons-vue'
+import { MoreFilled, FolderOpened, Plus, Document, ArrowRight } from '@element-plus/icons-vue'
 
 interface Document {
   id: number
@@ -230,6 +238,8 @@ const documents = ref<Document[]>([])
 const directories = ref<Directory[]>([])
 const folders = ref<Folder[]>([])
 const selectedDirectory = ref<number | null>(null)
+const selectedFolder = ref<number | null>(null)
+const breadcrumbFolders = ref<Folder[]>([])
 const showAddDialog = ref(false)
 const newDirName = ref('')
 const editingDir = ref<Directory | null>(null)
@@ -279,6 +289,9 @@ function loadDocuments() {
   if (selectedDirectory.value) {
     params.directory = selectedDirectory.value
   }
+  if (selectedFolder.value) {
+    params.folder = selectedFolder.value
+  }
   axios.get('/documents/documents/', { params })
     .then(response => {
       documents.value = response.data
@@ -289,8 +302,11 @@ function loadDocuments() {
 
 function loadFolders() {
   const params: Record<string, number> = {}
-  if (selectedDirectory.value) {
+  if (selectedFolder.value) {
+    params.parent = selectedFolder.value
+  } else if (selectedDirectory.value) {
     params.directory = selectedDirectory.value
+    params.parent = null
   }
   axios.get('/documents/folders/', { params })
     .then(response => {
@@ -315,8 +331,30 @@ function loadDirectories() {
 
 function selectDirectory(id: number) {
   selectedDirectory.value = id
+  selectedFolder.value = null
+  breadcrumbFolders.value = []
   loadDocuments()
   loadFolders()
+}
+
+function drillIntoFolder(folder: Folder) {
+  selectedFolder.value = folder.id
+  breadcrumbFolders.value.push(folder)
+  loadDocuments()
+  loadFolders()
+}
+
+function navigateToFolder(index: number) {
+  breadcrumbFolders.value = breadcrumbFolders.value.slice(0, index + 1)
+  const lastFolder = breadcrumbFolders.value[breadcrumbFolders.value.length - 1]
+  selectedFolder.value = lastFolder?.id || null
+  loadDocuments()
+  loadFolders()
+}
+
+function getCurrentDirectoryName() {
+  const dir = directories.value.find(d => d.id === selectedDirectory.value)
+  return dir?.name || ''
 }
 
 function editDirectory(dir: Directory) {
@@ -537,14 +575,28 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  padding: 12px 20px;
+  background: white;
+  border-radius: 8px;
 }
 
-.header-left {
+.breadcrumb-section {
+  flex: 1;
+}
+
+.stats-section {
+  margin-left: 20px;
 }
 
 .stats-text {
   font-size: 14px;
   color: #666;
+}
+
+.arrow-icon {
+  font-size: 14px;
+  color: #999;
+  margin-left: 4px;
 }
 
 .list-content {
