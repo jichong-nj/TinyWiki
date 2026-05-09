@@ -14,9 +14,9 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            email = serializer.validated_data['email']
+            username = serializer.validated_data['username']
             password = serializer.validated_data['password']
-            user = authenticate(email=email, password=password)
+            user = authenticate(username=username, password=password)
             if user:
                 refresh = RefreshToken.for_user(user)
                 return Response({

@@ -25,8 +25,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => !!accessToken.value && !!user.value)
 
-  function login(email: string, password: string) {
-    return axios.post('/auth/login/', { email, password })
+  function login(username: string, password: string) {
+    return axios.post('/auth/login/', { username, password })
       .then(response => {
         accessToken.value = response.data.access
         refreshToken.value = response.data.refresh
