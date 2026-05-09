@@ -107,6 +107,7 @@
             v-for="doc in documents" 
             :key="doc.id" 
             class="document-item"
+            @click="editDocument(doc.id)"
           >
             <div class="item-left">
               <el-icon class="doc-icon"><Document /></el-icon>
@@ -124,7 +125,7 @@
             
             <div class="item-right">
               <span class="update-time">{{ doc.updated_at }}</span>
-              <el-dropdown trigger="click">
+              <el-dropdown trigger="click" @click.stop>
                 <el-button type="text" class="menu-btn">
                   <el-icon><MoreFilled /></el-icon>
                 </el-button>
