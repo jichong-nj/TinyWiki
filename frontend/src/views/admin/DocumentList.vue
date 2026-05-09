@@ -322,6 +322,7 @@ function loadDirectories() {
       if (directories.value.length > 0 && !selectedDirectory.value) {
         selectedDirectory.value = directories.value[0].id
         loadDocuments()
+        loadFolders()
       }
     })
     .catch(error => console.error('加载目录失败:', error))

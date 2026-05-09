@@ -172,10 +172,10 @@ class DocumentListView(APIView):
         directory_id = request.query_params.get('directory')
         folder_id = request.query_params.get('folder')
         documents = Document.objects.all()
-        if directory_id:
-            documents = documents.filter(directory_id=directory_id)
         if folder_id:
             documents = documents.filter(folder_id=folder_id)
+        elif directory_id:
+            documents = documents.filter(directory_id=directory_id, folder__isnull=True)
         serializer = DocumentSerializer(documents, many=True)
         return Response(serializer.data)
     
