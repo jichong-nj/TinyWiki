@@ -118,7 +118,7 @@
           </div>
         </aside>
 
-        <main class="content-area">
+        <main class="content-area" ref="contentAreaRef">
           <div v-if="selectedFile" class="document-viewer">
             <div class="document-header">
               <div class="breadcrumbs">
@@ -180,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import axios from '../../axios'
 
 interface KnowledgeBase {
@@ -223,6 +223,7 @@ const renderedContent = ref('')
 const tocCollapsed = ref(false)
 const tocItems = ref<TocItem[]>([])
 const activeTocItem = ref('')
+const contentAreaRef = ref<HTMLElement | null>(null)
 
 const expandedNodes = ref(new Set<number>())
 
@@ -472,6 +473,7 @@ watch(selectedDirectory, () => {
   flex-direction: column;
   height: 100vh;
   background: #f8f9fa;
+  overflow: hidden;
 }
 
 .wiki-header {
@@ -482,6 +484,8 @@ watch(selectedDirectory, () => {
   background: #ffffff;
   border-bottom: 1px solid #e9ecef;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+  height: 60px;
 }
 
 .header-left {
@@ -545,39 +549,82 @@ watch(selectedDirectory, () => {
   color: #95a5a6;
 }
 
+.wiki-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
 .directory-tabs {
   display: flex;
-  gap: 8px;
-  padding: 12px 24px;
-  background: #ffffff;
+  gap: 12px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
   border-bottom: 1px solid #e9ecef;
   overflow-x: auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
 }
 
 .tab-item {
-  padding: 8px 16px;
-  border-radius: 6px;
+  padding: 10px 20px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
-  color: #6c757d;
-  transition: all 0.2s;
+  font-weight: 500;
+  color: #5a6a7a;
+  background: #ffffff;
+  border: 1px solid #e0e5eb;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  position: relative;
+}
+
+.tab-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3498db, #667eea);
+  border-radius: 0 0 4px 4px;
+  transition: width 0.3s ease;
 }
 
 .tab-item:hover {
-  background: #f1f3f4;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.15);
   color: #2c3e50;
+  border-color: #d0d8e0;
+}
+
+.tab-item:hover::before {
+  width: 60%;
 }
 
 .tab-item.active {
-  background: #3498db;
+  background: linear-gradient(135deg, #3498db 0%, #667eea 100%);
   color: white;
+  border-color: transparent;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(52, 152, 219, 0.35);
+}
+
+.tab-item.active::before {
+  width: 80%;
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .wiki-main-content {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
 }
 
 .sidebar {
@@ -586,6 +633,8 @@ watch(selectedDirectory, () => {
   border-right: 1px solid #e9ecef;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .sidebar-header {
@@ -595,6 +644,7 @@ watch(selectedDirectory, () => {
   padding: 12px 16px;
   border-bottom: 1px solid #e9ecef;
   background: #f8f9fa;
+  flex-shrink: 0;
 }
 
 .sidebar-title {
@@ -671,6 +721,8 @@ watch(selectedDirectory, () => {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
+  min-width: 0;
+  background: #f8f9fa;
 }
 
 .document-viewer {
@@ -731,8 +783,6 @@ watch(selectedDirectory, () => {
   padding: 24px;
   line-height: 1.8;
   color: #333;
-  max-height: calc(100vh - 320px);
-  overflow-y: auto;
 }
 
 .document-content h1 {
@@ -867,6 +917,8 @@ watch(selectedDirectory, () => {
   display: flex;
   flex-direction: column;
   transition: width 0.3s;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .toc-panel.collapsed {
@@ -880,6 +932,7 @@ watch(selectedDirectory, () => {
   padding: 12px 16px;
   border-bottom: 1px solid #e9ecef;
   background: #f8f9fa;
+  flex-shrink: 0;
 }
 
 .toc-title {
@@ -947,27 +1000,5 @@ watch(selectedDirectory, () => {
   justify-content: center;
   align-items: center;
   background: #f8f9fa;
-}
-
-.no-kb-content {
-  text-align: center;
-  color: #6c757d;
-}
-
-.no-kb-icon {
-  font-size: 80px;
-  display: block;
-  margin-bottom: 24px;
-}
-
-.no-kb-content h2 {
-  font-size: 24px;
-  margin: 0 0 12px 0;
-  color: #2c3e50;
-}
-
-.no-kb-content p {
-  font-size: 14px;
-  margin: 0;
 }
 </style>
