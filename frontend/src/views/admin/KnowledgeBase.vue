@@ -24,7 +24,7 @@
           <el-input v-model="form.name" placeholder="请输入知识库名称" />
         </el-form-item>
         <el-form-item label="描述" prop="description">
-          <el-textarea v-model="form.description" placeholder="请输入知识库描述" />
+          <el-input v-model="form.description" type="textarea" placeholder="请输入知识库描述" />
         </el-form-item>
       </el-form>
       
@@ -54,7 +54,7 @@
               <el-input v-model="directoryForm.name" />
             </el-form-item>
             <el-form-item label="描述">
-              <el-textarea v-model="directoryForm.description" />
+              <el-input v-model="directoryForm.description" type="textarea" />
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="saveDirectory">添加目录</el-button>

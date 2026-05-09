@@ -123,6 +123,26 @@ class DocumentVersion(models.Model):
         unique_together = ('document', 'version_number')
 
 
+class DocumentChunk(models.Model):
+    document = models.ForeignKey(
+        Document,
+        on_delete=models.CASCADE,
+        related_name='chunks'
+    )
+    content = models.TextField()
+    embedding = models.TextField(null=True, blank=True)
+    chunk_index = models.IntegerField()
+    chunk_size = models.IntegerField()
+    overlap_size = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.document.title} - Chunk {self.chunk_index}"
+    
+    class Meta:
+        ordering = ['chunk_index']
+
+
 class Permission(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

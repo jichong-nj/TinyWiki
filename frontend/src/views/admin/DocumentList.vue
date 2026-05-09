@@ -90,7 +90,7 @@
             <div class="item-right">
               <span class="update-time">-</span>
               <el-dropdown trigger="click" @click.stop>
-                <el-button type="text" class="menu-btn">
+                <el-button type="text" class="menu-btn" @click.stop>
                   <el-icon><MoreFilled /></el-icon>
                 </el-button>
                 <template #dropdown>
@@ -126,7 +126,7 @@
             <div class="item-right">
               <span class="update-time">{{ doc.updated_at }}</span>
               <el-dropdown trigger="click" @click.stop>
-                <el-button type="text" class="menu-btn">
+                <el-button type="text" class="menu-btn" @click.stop>
                   <el-icon><MoreFilled /></el-icon>
                 </el-button>
                 <template #dropdown>

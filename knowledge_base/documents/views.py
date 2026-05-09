@@ -451,3 +451,58 @@ class DocumentSearchView(APIView):
         
         serializer = DocumentSerializer(documents, many=True)
         return Response(serializer.data)
+
+
+class VectorSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        query = request.query_params.get('q', '')
+        top_k = int(request.query_params.get('top_k', 5))
+        
+        if not query.strip():
+            return Response([])
+        
+        from .models import DocumentChunk
+        from .embedding import get_embedding, cosine_similarity
+        from api.models import AIConfig
+        import json
+        
+        chunks = DocumentChunk.objects.filter(
+            document__publish_status='published',
+            embedding__isnull=False
+        ).select_related('document')
+        
+        ai_config = AIConfig.objects.first()
+        if not ai_config or not ai_config.embedding_api_key:
+            return Response([])
+        
+        query_embedding = get_embedding(
+            query,
+            ai_config.embedding_api_key,
+            ai_config.embedding_base_url,
+            ai_config.embedding_model_name
+        )
+        
+        if query_embedding is None:
+            return Response([])
+        
+        results = []
+        for chunk in chunks:
+            try:
+                chunk_embedding = json.loads(chunk.embedding)
+                similarity = cosine_similarity(query_embedding, chunk_embedding)
+                results.append({
+                    'chunk_id': chunk.id,
+                    'document_id': chunk.document.id,
+                    'document_title': chunk.document.title,
+                    'content': chunk.content,
+                    'similarity': similarity,
+                    'chunk_index': chunk.chunk_index
+                })
+            except (json.JSONDecodeError, TypeError):
+                continue
+        
+        results.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        return Response(results[:top_k])

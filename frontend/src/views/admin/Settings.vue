@@ -33,7 +33,7 @@
                 <el-input v-model="aiConfig.textGeneration.apiKey" type="password" placeholder="请输入 API Key" />
               </el-form-item>
               <el-form-item label="Base URL" required>
-                <el-input v-model="aiConfig.textGeneration.baseUrl" placeholder="如: https://api.openai.com/v1" />
+                <el-input v-model="aiConfig.textGeneration.baseUrl" placeholder="如: https://api.openai.com/v1 或 http://localhost:11434/v1" />
               </el-form-item>
               <el-form-item label="模型名称" required>
                 <el-input v-model="aiConfig.textGeneration.modelName" placeholder="如: gpt-4o" />
@@ -81,6 +81,13 @@
               </el-form-item>
               <el-form-item label="向量维度">
                 <el-input v-model="aiConfig.embedding.dimension" type="number" />
+              </el-form-item>
+              <el-form-item label="Input Type">
+                <el-select v-model="aiConfig.embedding.inputType">
+                  <el-option value="query" label="query" />
+                  <el-option value="document" label="document" />
+                </el-select>
+                <span style="margin-left: 10px; color: #999; font-size: 12px;">NVIDIA 非对称模型需要设置此项</span>
               </el-form-item>
             </el-form>
             
@@ -142,7 +149,7 @@
               <el-input v-model="systemConfig.name" />
             </el-form-item>
             <el-form-item label="系统描述">
-              <el-textarea v-model="systemConfig.description" />
+              <el-input v-model="systemConfig.description" type="textarea" />
             </el-form-item>
             <el-form-item label="默认语言" required>
               <el-select v-model="systemConfig.language">
@@ -194,10 +201,11 @@ const aiConfig = reactive({
   },
   embedding: {
     provider: 'openai',
-    apiKey: '',
-    baseUrl: 'https://api.openai.com/v1',
-    modelName: 'text-embedding-3-large',
-    dimension: 1024
+    apiKey: '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',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    modelName: 'nvidia/nv-embedqa-e5-v5',
+    dimension: 1024,
+    inputType: 'query'
   },
   rerank: {
     provider: 'cohere',
@@ -257,13 +265,19 @@ function testModel(modelType: 'textGeneration' | 'embedding' | 'rerank') {
     rerank: 'Rerank 模型'
   }
   
-  axios.post('/ai/test-model/', {
+  const postData: Record<string, any> = {
     model_type: modelType,
     provider: config.provider,
     api_key: config.apiKey,
     base_url: config.baseUrl,
     model_name: config.modelName
-  })
+  }
+  
+  if (modelType === 'embedding' && config.inputType) {
+    postData.input_type = config.inputType
+  }
+  
+  axios.post('/ai/test-model/', postData)
   .then(response => {
     const result = response.data
     testResults[modelType] = {
