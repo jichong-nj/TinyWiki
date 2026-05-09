@@ -54,6 +54,7 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item @click="showSubfolderDialog = true">创建子文件夹</el-dropdown-item>
                   <el-dropdown-item>批量删除</el-dropdown-item>
                   <el-dropdown-item>导出</el-dropdown-item>
                 </el-dropdown-menu>
@@ -63,6 +64,35 @@
         </div>
         
         <div class="document-items">
+          <div 
+            v-for="folder in folders" 
+            :key="folder.id" 
+            class="document-item folder-item"
+          >
+            <div class="item-left">
+              <el-icon class="folder-icon"><FolderOpened /></el-icon>
+              <span class="doc-name">{{ folder.name }}</span>
+            </div>
+            
+            <div class="item-center">
+            </div>
+            
+            <div class="item-right">
+              <span class="update-time">-</span>
+              <el-dropdown trigger="click">
+                <el-button type="text" class="menu-btn">
+                  <el-icon><MoreFilled /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="editFolder(folder)">修改</el-dropdown-item>
+                    <el-dropdown-item @click="deleteFolder(folder.id)">删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
+          
           <div 
             v-for="doc in documents" 
             :key="doc.id" 
@@ -102,15 +132,27 @@
       </div>
     </div>
     
-    <el-dialog :title="editingDir ? '修改目录' : '添加目录'" v-model="showAddDialog" @close="cancelCreateDirectory">
+    <el-dialog :title="editingDir ? '修改目录' : (editingFolder ? '修改文件夹' : '添加目录')" v-model="showAddDialog" @close="cancelCreateDirectory">
       <el-form>
-        <el-form-item label="目录名称">
-          <el-input v-model="newDirName" placeholder="请输入目录名称" />
+        <el-form-item label="名称">
+          <el-input v-model="newDirName" placeholder="请输入名称" @keyup.enter="handleSubmit" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="cancelCreateDirectory">取消</el-button>
-        <el-button type="primary" @click="editingDir ? updateDirectory() : createDirectory()">确定</el-button>
+        <el-button type="primary" @click="handleSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+    
+    <el-dialog title="创建子文件夹" v-model="showSubfolderDialog" @close="cancelCreateSubfolder">
+      <el-form>
+        <el-form-item label="子文件夹名称">
+          <el-input v-model="newSubfolderName" placeholder="请输入子文件夹名称" @keyup.enter="createSubfolder" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cancelCreateSubfolder">取消</el-button>
+        <el-button type="primary" @click="createSubfolder">确定</el-button>
       </template>
     </el-dialog>
   </div>
@@ -137,16 +179,28 @@ interface Directory {
   knowledge_base: number
 }
 
+interface Folder {
+  id: number
+  name: string
+  directory: number
+  parent: number | null
+}
+
 
 
 const router = useRouter()
 
 const documents = ref<Document[]>([])
 const directories = ref<Directory[]>([])
+const folders = ref<Folder[]>([])
 const selectedDirectory = ref<number | null>(null)
 const showAddDialog = ref(false)
 const newDirName = ref('')
 const editingDir = ref<Directory | null>(null)
+const editingFolder = ref<Folder | null>(null)
+
+const showSubfolderDialog = ref(false)
+const newSubfolderName = ref('')
 
 const draftCount = ref(0)
 const pendingAnalysisCount = ref(0)
@@ -184,6 +238,18 @@ function loadDocuments() {
     .catch(error => console.error('加载文档失败:', error))
 }
 
+function loadFolders() {
+  const params: Record<string, number> = {}
+  if (selectedDirectory.value) {
+    params.directory = selectedDirectory.value
+  }
+  axios.get('/documents/folders/', { params })
+    .then(response => {
+      folders.value = response.data
+    })
+    .catch(error => console.error('加载文件夹失败:', error))
+}
+
 function loadDirectories() {
   axios.get('/documents/directories/')
     .then(response => {
@@ -201,6 +267,7 @@ function loadDirectories() {
 function selectDirectory(id: number) {
   selectedDirectory.value = id
   loadDocuments()
+  loadFolders()
 }
 
 function editDirectory(dir: Directory) {
@@ -259,6 +326,72 @@ function createDirectory() {
 function cancelCreateDirectory() {
   showAddDialog.value = false
   newDirName.value = ''
+  editingDir.value = null
+  editingFolder.value = null
+}
+
+function handleSubmit() {
+  if (editingDir.value) {
+    updateDirectory()
+  } else if (editingFolder.value) {
+    updateFolder()
+  } else {
+    createDirectory()
+  }
+}
+
+function createSubfolder() {
+  if (!newSubfolderName.value.trim() || !selectedDirectory.value) {
+    return
+  }
+  axios.post('/documents/folders/', {
+    name: newSubfolderName.value,
+    directory: selectedDirectory.value
+  })
+  .then(() => {
+    loadFolders()
+    showSubfolderDialog.value = false
+    newSubfolderName.value = ''
+  })
+  .catch(error => console.error('创建子文件夹失败:', error))
+}
+
+function cancelCreateSubfolder() {
+  showSubfolderDialog.value = false
+  newSubfolderName.value = ''
+}
+
+function editFolder(folder: Folder) {
+  editingFolder.value = folder
+  newDirName.value = folder.name
+  showAddDialog.value = true
+}
+
+function updateFolder() {
+  if (!newDirName.value.trim() || !editingFolder.value) {
+    return
+  }
+  axios.put(`/documents/folders/${editingFolder.value.id}/`, {
+    name: newDirName.value,
+    directory: editingFolder.value.directory
+  })
+  .then(() => {
+    loadFolders()
+    showAddDialog.value = false
+    newDirName.value = ''
+    editingFolder.value = null
+  })
+  .catch(error => console.error('更新文件夹失败:', error))
+}
+
+function deleteFolder(id: number) {
+  if (confirm('确定要删除这个文件夹吗？')) {
+    axios.delete(`/documents/folders/${id}/`)
+      .then(() => {
+        loadFolders()
+      })
+      .catch(error => console.error('删除文件夹失败:', error))
+  }
 }
 
 function createDocument() {
@@ -290,6 +423,7 @@ function publishDocument(id: number) {
 onMounted(() => {
   loadDocuments()
   loadDirectories()
+  loadFolders()
 })
 </script>
 
@@ -462,6 +596,11 @@ onMounted(() => {
 
 .doc-icon {
   color: #1890ff;
+  font-size: 16px;
+}
+
+.folder-icon {
+  color: #e6a23c;
   font-size: 16px;
 }
 
