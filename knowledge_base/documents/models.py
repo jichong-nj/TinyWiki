@@ -1,5 +1,7 @@
 from django.db import models
 from django.conf import settings
+from django.contrib.postgres.search import SearchVectorField
+from django.db.models.signals import post_save, post_delete
 
 
 class KnowledgeBase(models.Model):
@@ -68,6 +70,7 @@ class Document(models.Model):
     title = models.CharField(max_length=200)
     filename = models.CharField(max_length=200)
     content = models.TextField(blank=True, null=True)
+    search_vector = SearchVectorField(null=True, blank=True)
     publish_status = models.CharField(
         max_length=20,
         choices=[

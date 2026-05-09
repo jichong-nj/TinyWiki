@@ -2,6 +2,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+from django.db import connection
 from .models import KnowledgeBase, Directory, Folder, Document, DocumentVersion, Permission
 from .serializers import (
     KnowledgeBaseSerializer,
@@ -422,3 +424,30 @@ class PermissionDetailView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Permission.DoesNotExist:
             return Response({'error': 'Permission not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class DocumentSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        query = request.query_params.get('q', '')
+        directory_id = request.query_params.get('directory')
+        folder_id = request.query_params.get('folder')
+        
+        if not query.strip():
+            return Response([])
+        
+        search_query = SearchQuery(query, config='chinese')
+        
+        documents = Document.objects.filter(
+            search_vector=search_query,
+            publish_status='published'
+        )
+        
+        if folder_id:
+            documents = documents.filter(folder_id=folder_id)
+        elif directory_id:
+            documents = documents.filter(directory_id=directory_id)
+        
+        serializer = DocumentSerializer(documents, many=True)
+        return Response(serializer.data)

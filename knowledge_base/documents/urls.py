@@ -11,6 +11,7 @@ from .views import (
     DocumentVersionListView,
     DocumentPublishView,
     DocumentTreeView,
+    DocumentSearchView,
     PermissionListView,
     PermissionDetailView
 )
@@ -30,6 +31,7 @@ urlpatterns = [
     path('documents/<int:pk>/', DocumentDetailView.as_view(), name='document-detail'),
     path('documents/<int:pk>/publish/', DocumentPublishView.as_view(), name='document-publish'),
     path('documents/<int:document_id>/versions/', DocumentVersionListView.as_view(), name='document-versions'),
+    path('documents/search/', DocumentSearchView.as_view(), name='document-search'),
     
     path('permissions/', PermissionListView.as_view(), name='permission-list'),
     path('permissions/<int:pk>/', PermissionDetailView.as_view(), name='permission-detail'),
