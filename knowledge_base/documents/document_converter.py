@@ -1,6 +1,8 @@
 import os
 import json
 import tempfile
+import subprocess
+import shutil
 from pathlib import Path
 from django.utils import timezone
 from django.conf import settings
@@ -11,7 +13,7 @@ from .storage_service import StorageService
 class DocumentConverter:
     """文档转换器"""
     
-    SUPPORTED_TYPES = ['docx', 'doc', 'md', 'txt']
+    SUPPORTED_TYPES = ['docx', 'doc', 'md', 'txt', 'pptx', 'ppt']
     
     @classmethod
     def convert(cls, file_storage_id):
@@ -41,6 +43,8 @@ class DocumentConverter:
             
             if file_type in ['docx']:
                 result = cls._convert_docx(file_storage, conversion)
+            elif file_type in ['pptx', 'ppt']:
+                result = cls._convert_pptx(file_storage, conversion)
             elif file_type in ['md', 'txt']:
                 result = cls._convert_text(file_storage, conversion)
             else:
@@ -62,31 +66,20 @@ class DocumentConverter:
             
         except Exception as e:
             import traceback
-            error_msg = f"转换失败: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            
-            try:
-                # 尝试更新转换记录
-                conversion = DocumentConversion.objects.filter(original_file_id=file_storage_id).first()
-                if conversion:
-                    conversion.status = 'failed'
-                    conversion.error_message = error_msg
-                    conversion.completed_at = timezone.now()
-                    conversion.save()
-            except:
-                pass
-            
-            return {'success': False, 'error': error_msg}
+            return {'success': False, 'error': f'转换失败: {str(e)}\n{traceback.format_exc()}'}
     
     @classmethod
     def convert_async(cls, file_storage_id):
         """
-        异步转换文档（这里简化为同步调用，实际项目中可以使用Celery）
+        异步转换文档（同步实现的兼容方法）
         
         Args:
             file_storage_id: FileStorage对象的ID
+            
+        Returns:
+            dict: 转换结果
         """
-        # 简化实现，直接同步调用
+        # 目前直接调用同步方法
         return cls.convert(file_storage_id)
     
     @classmethod
@@ -138,7 +131,7 @@ class DocumentConverter:
                         
                         # 创建附件关联
                         if file_storage.document:
-                            attachment = FileAttachment.objects.create(
+                            FileAttachment.objects.create(
                                 document=file_storage.document,
                                 file_storage=image_file,
                                 original_name=image_name,
@@ -336,3 +329,197 @@ class DocumentConverter:
             
         except Exception as e:
             return {'success': False, 'error': f'文本转换失败: {str(e)}'}
+    
+    @classmethod
+    def _convert_pptx(cls, file_storage, conversion):
+        """
+        转换PowerPoint文档
+        
+        Args:
+            file_storage: FileStorage对象
+            conversion: DocumentConversion对象
+            
+        Returns:
+            dict: 转换结果
+        """
+        try:
+            # 尝试导入必需的库
+            from pptx import Presentation
+            from pdf2image import convert_from_path
+            from PIL import Image
+            
+        except ImportError as e:
+            return {
+                'success': False, 
+                'error': f'缺少依赖库: {str(e)}\n请安装: pip install python-pptx pdf2image Pillow'
+            }
+        
+        try:
+            ppt_path = file_storage.full_path
+            
+            # 1. 读取PPT文件，提取备注
+            prs = Presentation(ppt_path)
+            slide_info_list = []
+            
+            for idx, slide in enumerate(prs.slides):
+                # 提取备注
+                note_text = ""
+                if slide.has_notes_slide:
+                    notes_slide = slide.notes_slide
+                    for shape in notes_slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            note_text += shape.text + "\n"
+                
+                # 提取每页文字
+                slide_text = ""
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        try:
+                            slide_text += shape.text + "\n"
+                        except:
+                            pass
+                
+                slide_info_list.append({
+                    'index': idx + 1,
+                    'text': slide_text.strip(),
+                    'notes': note_text.strip()
+                })
+            
+            # 2. 尝试 PPT → PDF 转换
+            pdf_path = None
+            temp_dir = tempfile.mkdtemp()
+            try:
+                # 使用 LibreOffice 转换
+                output_dir = temp_dir
+                result = subprocess.run([
+                    'libreoffice',
+                    '--headless',
+                    '--convert-to', 'pdf',
+                    '--outdir', output_dir,
+                    ppt_path
+                ], capture_output=True, text=True, timeout=120)
+                
+                if result.returncode == 0:
+                    # 找到生成的 PDF 文件
+                    pdf_filename = Path(ppt_path).stem + '.pdf'
+                    pdf_path = Path(output_dir) / pdf_filename
+                    
+                    if not pdf_path.exists():
+                        # 尝试找其他可能的文件名
+                        pdf_files = list(Path(output_dir).glob("*.pdf"))
+                        if pdf_files:
+                            pdf_path = pdf_files[0]
+            except Exception as e:
+                pdf_path = None
+            
+            # 3. PDF → 图片 转换
+            slide_images = []
+            attachments = []
+            
+            if pdf_path and pdf_path.exists():
+                try:
+                    images = convert_from_path(
+                        str(pdf_path),
+                        dpi=300,
+                        fmt='png'
+                    )
+                    
+                    for idx, img in enumerate(images):
+                        # 保存图片到临时文件
+                        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                            img.save(tmp, format='PNG')
+                            tmp_path = tmp.name
+                        
+                        # 保存到 storage/attachments
+                        img_filename = f"slide_{idx+1}.png"
+                        img_file = StorageService.save_file_from_path(
+                            source_path=tmp_path,
+                            storage_type='attachment',
+                            document=file_storage.document,
+                            original_name=img_filename
+                        )
+                        
+                        slide_images.append({
+                            'index': idx + 1,
+                            'file': img_file
+                        })
+                        
+                        attachments.append(img_file)
+                        
+                        # 清理临时文件
+                        os.unlink(tmp_path)
+                except Exception as e:
+                    slide_images = []
+            
+            # 4. 生成 Markdown 内容
+            markdown_content = []
+            
+            # 标题
+            markdown_content.append(f"# {Path(file_storage.file_name).stem}\n\n")
+            
+            for idx, slide_info in enumerate(slide_info_list):
+                slide_num = slide_info['index']
+                
+                # 添加幻灯片标题
+                markdown_content.append(f"## 第 {slide_num} 页\n\n")
+                
+                # 添加图片
+                img_found = False
+                for slide_img in slide_images:
+                    if slide_img['index'] == slide_num:
+                        markdown_content.append(f"![幻灯片 {slide_num}]({slide_img['file'].file_url})\n\n")
+                        img_found = True
+                        break
+                
+                if not img_found:
+                    markdown_content.append(f"![幻灯片 {slide_num}](未生成图片)\n\n")
+                
+                # 添加文字内容
+                if slide_info['text']:
+                    markdown_content.append(f"**内容：**\n\n{slide_info['text']}\n\n")
+                
+                # 添加备注
+                if slide_info['notes']:
+                    markdown_content.append(f"**备注：**\n\n{slide_info['notes']}\n\n")
+                
+                markdown_content.append("---\n\n")
+            
+            # 保存转换后的Markdown
+            converted_name = Path(file_storage.file_name).stem + '.md'
+            markdown_text = ''.join(markdown_content)
+            
+            converted_file = StorageService.save_file(
+                file_obj=None,
+                storage_type='converted',
+                document=file_storage.document,
+                original_name=converted_name,
+                content=markdown_text
+            )
+            
+            # 更新文档内容
+            if file_storage.document:
+                file_storage.document.content = markdown_text
+                file_storage.document.save()
+            
+            conversion_info = {
+                'slides_count': len(slide_info_list),
+                'images_count': len(slide_images),
+                'method': 'libreoffice-pdf' if pdf_path else 'text-only'
+            }
+            
+            # 清理临时目录
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+            
+            return {
+                'success': True,
+                'converted_file': converted_file,
+                'info': conversion_info,
+                'markdown': markdown_text
+            }
+            
+        except Exception as e:
+            import traceback
+            return {'success': False, 'error': f'PPT转换失败: {str(e)}\n{traceback.format_exc()}'}

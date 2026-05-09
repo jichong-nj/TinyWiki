@@ -175,7 +175,7 @@
           :headers="uploadHeaders"
           :data="uploadData"
           :multiple="true"
-          accept=".md,.txt,.docx,.doc"
+          accept=".md,.txt,.docx,.doc,.pptx,.ppt"
           :auto-upload="false"
           :on-change="handleFileChange"
           :on-success="handleUploadSuccess"
