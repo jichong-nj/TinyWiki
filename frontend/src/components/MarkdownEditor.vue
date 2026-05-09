@@ -12,6 +12,12 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import VMdEditor from '@kangc/v-md-editor'
+import '@kangc/v-md-editor/lib/style/base-editor.css'
+import vuepressTheme from '@kangc/v-md-editor/lib/theme/vuepress.js'
+import '@kangc/v-md-editor/lib/theme/style/vuepress.css'
+
+VMdEditor.use(vuepressTheme)
 
 const props = defineProps({
   modelValue: {
@@ -20,7 +26,7 @@ const props = defineProps({
   },
   height: {
     type: String,
-    default: '600px'
+    default: '100%'
   },
   mode: {
     type: String,
@@ -41,9 +47,6 @@ watch(content, (newVal) => {
 })
 
 const toolbar = [
-  'undo',
-  'redo',
-  '|',
   'bold',
   'italic',
   'header',
@@ -63,6 +66,9 @@ const toolbar = [
   'link',
   'image',
   'table',
+  '|',
+  'undo',
+  'redo',
 ]
 
 const handleSave = () => {
@@ -74,29 +80,17 @@ const handleSave = () => {
 .md-editor-wrapper {
   width: 100%;
   height: 100%;
-  min-height: 600px;
 }
 
-.md-editor-wrapper :deep(.v-md-editor__split) {
-  display: flex;
-}
-
-.md-editor-wrapper :deep(.v-md-editor__left) {
+:deep(.v-md-editor__left) {
   border-right: 2px solid #3498db !important;
 }
 
-.md-editor-wrapper :deep(.v-md-editor__right) {
-  border-left: 1px solid #e9ecef;
+:deep(.v-md-editor__left .v-md-editor__toolbar) {
+  border-bottom: 1px solid #e9ecef;
 }
 
-.md-editor-wrapper :deep(.v-md-editor__resize-bar) {
-  background: #3498db !important;
-  width: 6px !important;
-  cursor: col-resize;
-  opacity: 1 !important;
-}
-
-.md-editor-wrapper :deep(.v-md-editor__resize-bar:hover) {
-  background: #1976d2 !important;
+:deep(.v-md-editor__right) {
+  border-left: none;
 }
 </style>
