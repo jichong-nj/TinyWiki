@@ -13,12 +13,36 @@
     
     <div class="list-content">
       <div class="directory-tree">
-        <el-tree
-          :data="treeData"
-          :props="treeProps"
-          @node-click="handleTreeClick"
-          class="tree"
-        />
+        <div class="tree-content">
+          <div 
+            v-for="dir in directories" 
+            :key="dir.id" 
+            class="tree-item"
+            :class="{ active: selectedDirectory === dir.id }"
+            @click="selectDirectory(dir.id)"
+          >
+            <el-icon class="dir-icon"><FolderOpened /></el-icon>
+            <span class="dir-name">{{ dir.name }}</span>
+            <el-dropdown trigger="click" @click.stop>
+              <el-button type="text" class="item-menu-btn">
+                <el-icon class="icon"><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="editDirectory(dir)">修改</el-dropdown-item>
+                  <el-dropdown-item @click="deleteDirectory(dir.id)">删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+          
+          <div class="add-dir-item">
+            <el-button type="text" class="add-dir-btn" @click="showAddDialog = true">
+              <el-icon class="add-icon"><Plus /></el-icon>
+              <span>添加目录</span>
+            </el-button>
+          </div>
+        </div>
       </div>
       
       <div class="document-table">
@@ -50,6 +74,18 @@
         </el-table>
       </div>
     </div>
+    
+    <el-dialog :title="editingDir ? '修改目录' : '添加目录'" v-model="showAddDialog" @close="cancelCreateDirectory">
+      <el-form>
+        <el-form-item label="目录名称">
+          <el-input v-model="newDirName" placeholder="请输入目录名称" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cancelCreateDirectory">取消</el-button>
+        <el-button type="primary" @click="editingDir ? updateDirectory() : createDirectory()">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -57,6 +93,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
+import { MoreFilled, FolderOpened, Plus } from '@element-plus/icons-vue'
 
 interface Document {
   id: number
@@ -73,24 +110,18 @@ interface Directory {
   knowledge_base: number
 }
 
-interface TreeItem {
-  id: number
-  name: string
-  type: string
-  children?: TreeItem[]
-}
+
 
 const router = useRouter()
 
 const documents = ref<Document[]>([])
 const directories = ref<Directory[]>([])
 const selectedDirectory = ref<number | null>(null)
-const treeData = ref<TreeItem[]>([])
+const showAddDialog = ref(false)
+const newDirName = ref('')
+const editingDir = ref<Directory | null>(null)
 
-const treeProps = {
-  label: 'name',
-  children: 'children'
-}
+
 
 function getAnalysisTagType(status: string) {
   switch (status) {
@@ -128,21 +159,69 @@ function loadDirectories() {
     .catch(error => console.error('加载目录失败:', error))
 }
 
-function loadTree() {
-  axios.get('/documents/knowledge-bases/1/tree/')
-    .then(response => {
-      treeData.value = response.data
-    })
-    .catch(error => console.error('加载目录树失败:', error))
+
+
+function selectDirectory(id: number) {
+  selectedDirectory.value = id
+  loadDocuments()
 }
 
-function handleTreeClick(node: TreeItem) {
-  if (node.type === 'directory') {
-    selectedDirectory.value = node.id
-    loadDocuments()
-  } else if (node.type === 'document') {
-    router.push(`/document/${node.id}`)
+function editDirectory(dir: Directory) {
+  editingDir.value = dir
+  newDirName.value = dir.name
+  showAddDialog.value = true
+}
+
+function deleteDirectory(id: number) {
+  if (confirm('确定要删除这个目录吗？')) {
+    axios.delete(`/documents/directories/${id}/`)
+      .then(() => {
+        loadDirectories()
+        if (selectedDirectory.value === id) {
+          selectedDirectory.value = null
+          loadDocuments()
+        }
+      })
+      .catch(error => console.error('删除目录失败:', error))
   }
+}
+
+function updateDirectory() {
+  if (!newDirName.value.trim() || !editingDir.value) {
+    return
+  }
+  axios.put(`/documents/directories/${editingDir.value.id}/`, {
+    name: newDirName.value,
+    knowledge_base: editingDir.value.knowledge_base
+  })
+  .then(() => {
+    loadDirectories()
+    showAddDialog.value = false
+    newDirName.value = ''
+    editingDir.value = null
+  })
+  .catch(error => console.error('更新目录失败:', error))
+}
+
+function createDirectory() {
+  if (!newDirName.value.trim()) {
+    return
+  }
+  axios.post('/documents/directories/', {
+    name: newDirName.value,
+    knowledge_base: 1
+  })
+  .then(() => {
+    loadDirectories()
+    showAddDialog.value = false
+    newDirName.value = ''
+  })
+  .catch(error => console.error('创建目录失败:', error))
+}
+
+function cancelCreateDirectory() {
+  showAddDialog.value = false
+  newDirName.value = ''
 }
 
 function createDocument() {
@@ -174,7 +253,6 @@ function publishDocument(id: number) {
 onMounted(() => {
   loadDocuments()
   loadDirectories()
-  loadTree()
 })
 </script>
 
@@ -208,13 +286,78 @@ onMounted(() => {
   width: 250px;
   background: white;
   border-radius: 8px;
-  padding: 10px;
+  overflow: hidden;
+}
+
+.tree-content {
+  padding: 8px;
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
 }
 
-.tree :deep(.el-tree-node__content) {
-  height: 36px;
-  line-height: 36px;
+.tree-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tree-item:hover {
+  background-color: #f5f7fa;
+}
+
+.tree-item.active {
+  background-color: #e8f4fd;
+}
+
+.tree-item.active .dir-name {
+  color: #1890ff;
+}
+
+.dir-icon {
+  margin-right: 8px;
+  color: #1890ff;
+}
+
+.dir-name {
+  flex: 1;
+  font-size: 13px;
+  color: #333;
+}
+
+.item-menu-btn {
+  padding: 4px;
+  color: #999;
+  opacity: 0;
+}
+
+.tree-item:hover .item-menu-btn {
+  opacity: 1;
+}
+
+.item-menu-btn:hover {
+  color: #666;
+}
+
+.add-dir-item {
+  padding: 8px 12px;
+}
+
+.add-dir-btn {
+  width: 100%;
+  justify-content: center;
+  color: #1890ff;
+  font-size: 13px;
+}
+
+.add-dir-btn:hover {
+  background-color: #e8f4fd;
+}
+
+.add-icon {
+  margin-right: 4px;
 }
 
 .document-table {
