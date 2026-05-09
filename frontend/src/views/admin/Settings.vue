@@ -180,7 +180,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import axios from 'axios'
+import axios from '../../axios'
 
 const activeTab = ref('ai')
 
