@@ -4,22 +4,14 @@
       <div class="logo">
         <h2>TinyWiki</h2>
       </div>
-      <el-menu :default-active="activeMenu" class="sidebar-menu">
-        <el-menu-item index="/">
-          <el-icon><Document /></el-icon>
-          <span>文档</span>
-        </el-menu-item>
+      <el-menu :default-active="activeMenu" class="sidebar-menu" router>
         <el-menu-item index="/knowledge-base">
           <el-icon><FolderOpened /></el-icon>
           <span>知识库</span>
         </el-menu-item>
-        <el-menu-item index="/permissions">
-          <el-icon><Key /></el-icon>
-          <span>权限</span>
-        </el-menu-item>
         <el-menu-item index="/settings">
           <el-icon><Setting /></el-icon>
-          <span>设置</span>
+          <span>大模型配置</span>
         </el-menu-item>
       </el-menu>
       
@@ -169,6 +161,7 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
 .top-header {
