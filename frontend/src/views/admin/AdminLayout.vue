@@ -5,6 +5,10 @@
         <h2>TinyWiki</h2>
       </div>
       <el-menu :default-active="activeMenu" class="sidebar-menu" router>
+        <el-menu-item index="/">
+          <el-icon><Document /></el-icon>
+          <span>文档</span>
+        </el-menu-item>
         <el-menu-item index="/knowledge-base">
           <el-icon><FolderOpened /></el-icon>
           <span>知识库</span>
@@ -47,7 +51,7 @@
         </div>
       </header>
       
-      <router-view />
+      <router-view class="router-view-content" />
     </main>
   </div>
 </template>
@@ -162,6 +166,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
+}
+
+.router-view-content {
+  flex: 1;
+  overflow: hidden;
 }
 
 .top-header {

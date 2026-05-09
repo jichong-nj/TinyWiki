@@ -296,31 +296,32 @@ async function testAllModels() {
 function saveSettings() {
   axios.post('/ai/config/', aiConfig)
     .then(() => {
-      elAlert('AI 模型配置已保存')
+      showNotification('AI 模型配置已保存')
     })
     .catch(error => {
       console.error('保存失败:', error)
-      elAlert('保存失败: ' + (error.response?.data?.message || error.message), 'error')
+      showNotification('保存失败: ' + (error.response?.data?.message || error.message), 'error')
     })
 }
 
 function saveSystemSettings() {
   axios.post('/system/config/', systemConfig)
     .then(() => {
-      elAlert('系统配置已保存')
+      showNotification('系统配置已保存')
     })
     .catch(error => {
       console.error('保存失败:', error)
-      elAlert('保存失败: ' + (error.response?.data?.message || error.message), 'error')
+      showNotification('保存失败: ' + (error.response?.data?.message || error.message), 'error')
     })
 }
 
-function elAlert(message: string, type: 'success' | 'error' | 'info' = 'success') {
+function showNotification(message: string | object, type: 'success' | 'error' | 'info' = 'success') {
+  const msg = typeof message === 'object' ? JSON.stringify(message) : message
   const alert = document.createElement('div')
   alert.className = `el-alert el-alert--${type} is-light`
   alert.innerHTML = `
     <i class="el-alert__icon el-icon-${type === 'success' ? 'check-circle' : type === 'error' ? 'error' : 'info'}"></i>
-    <span class="el-alert__title">${message}</span>
+    <span class="el-alert__title">${msg}</span>
   `
   alert.style.position = 'fixed'
   alert.style.top = '20px'
