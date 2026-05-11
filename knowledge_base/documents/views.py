@@ -448,7 +448,7 @@ class DocumentSearchView(APIView):
         ).filter(
             search_vector=search_query,
             publish_status='published'
-        )
+        ).select_related('directory', 'folder', 'directory__knowledge_base')
         
         if folder_id:
             documents = documents.filter(folder_id=folder_id)
@@ -457,8 +457,61 @@ class DocumentSearchView(APIView):
         
         documents = documents.order_by('-rank', '-updated_at')
         
-        serializer = DocumentSerializer(documents, many=True)
-        return Response(serializer.data)
+        results = []
+        for doc in documents:
+            # 构建路径
+            path_parts = []
+            if doc.directory and doc.directory.knowledge_base:
+                path_parts.append(doc.directory.knowledge_base.name)
+            if doc.directory:
+                path_parts.append(doc.directory.name)
+            if doc.folder:
+                path_parts.append(doc.folder.name)
+            
+            # 生成摘要
+            summary = self._generate_summary(doc.content, query)
+            
+            results.append({
+                'id': doc.id,
+                'title': doc.title,
+                'filename': doc.filename,
+                'content': doc.content,
+                'path': ' / '.join(path_parts) if path_parts else '',
+                'summary': summary,
+                'updated_at': doc.updated_at.isoformat() if doc.updated_at else None,
+                'rank': float(doc.rank) if hasattr(doc, 'rank') else 0.0
+            })
+        
+        return Response(results)
+    
+    def _generate_summary(self, content, query, max_length=200):
+        if not content:
+            return ''
+        
+        # 简化版本：找到查询词附近的内容
+        query_lower = query.lower()
+        content_lower = content.lower()
+        
+        # 尝试找到查询词的位置
+        idx = content_lower.find(query_lower)
+        if idx != -1:
+            # 从查询词前50个字符开始，后150个字符结束
+            start = max(0, idx - 50)
+            end = min(len(content), idx + len(query) + 150)
+            summary = content[start:end]
+            
+            # 如果是从中间截取的，添加省略号
+            if start > 0:
+                summary = '...' + summary
+            if end < len(content):
+                summary = summary + '...'
+            
+            return summary
+        
+        # 如果没找到查询词，返回开头部分
+        if len(content) > max_length:
+            return content[:max_length] + '...'
+        return content
 
 
 class VectorSearchView(APIView):

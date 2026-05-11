@@ -45,8 +45,14 @@
       <div v-if="showSearchResults && searchResults.length" class="search-results-overlay" @click="showSearchResults = false">
         <div class="search-results-panel" @click.stop>
           <div class="search-results-header">
-            <h3>搜索结果</h3>
-            <span class="results-count">共 {{ searchResults.length }} 条结果</span>
+            <div class="search-header-left">
+              <span class="search-icon">🔍</span>
+              <h3>搜索结果</h3>
+            </div>
+            <div class="search-header-right">
+              <span class="results-count">共 {{ searchResults.length }} 条结果</span>
+              <button class="close-btn" @click="showSearchResults = false">×</button>
+            </div>
           </div>
           <div class="search-results-list">
             <div 
@@ -56,9 +62,20 @@
               @click="selectSearchResult(result)"
             >
               <div class="result-title">{{ result.title }}</div>
-              <div class="result-meta">
-                <span class="result-filename">{{ result.filename }}</span>
+              <div class="result-path">
+                <span class="path-icon">📁</span>
+                <span class="path-text">{{ result.path || '根目录' }}</span>
+              </div>
+              <div class="result-filename">
+                <span class="file-icon">📄</span>
+                <span>{{ result.filename }}</span>
+              </div>
+              <div v-if="result.summary" class="result-summary">
+                {{ result.summary }}
+              </div>
+              <div class="result-footer">
                 <span class="result-date">{{ formatTime(result.updated_at) }}</span>
+                <span v-if="result.rank" class="result-score">相关度: {{ (result.rank * 100).toFixed(0) }}%</span>
               </div>
             </div>
           </div>
@@ -1136,17 +1153,20 @@ watch(selectedDirectory, () => {
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding-top: 120px;
-  z-index: 1000;
+  align-items: center;
+  z-index: 9999;
 }
 
 .search-results-panel {
-  width: 600px;
-  max-height: 70vh;
+  width: 800px;
+  max-width: 95vw;
+  height: 70vh;
+  max-height: 800px;
   background: white;
-  border-radius: 12px;
+  border-radius: 16px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -1155,29 +1175,62 @@ watch(selectedDirectory, () => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid #e9ecef;
-  background: #f8f9fa;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  flex-shrink: 0;
+}
+
+.search-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-header-left .search-icon {
+  font-size: 20px;
 }
 
 .search-results-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #2c3e50;
+  color: white;
+}
+
+.search-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .results-count {
   font-size: 13px;
-  color: #6c757d;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.search-results-header .close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  line-height: 1;
+}
+
+.search-results-header .close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .search-results-list {
-  max-height: calc(70vh - 60px);
+  flex: 1;
   overflow-y: auto;
 }
 
 .search-result-item {
-  padding: 14px 20px;
+  padding: 18px 24px;
   cursor: pointer;
   transition: background 0.2s;
   border-bottom: 1px solid #f0f0f0;
@@ -1192,28 +1245,62 @@ watch(selectedDirectory, () => {
 }
 
 .result-title {
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
   color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+.result-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #667eea;
   margin-bottom: 6px;
 }
 
-.result-meta {
-  display: flex;
-  gap: 12px;
-  font-size: 13px;
-  color: #6c757d;
+.path-icon, .file-icon {
+  font-size: 14px;
+}
+
+.path-text {
+  opacity: 0.9;
 }
 
 .result-filename {
-  padding: 2px 8px;
-  background: #f1f3f4;
-  border-radius: 4px;
-}
-
-.result-date {
   display: flex;
   align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #6c757d;
+  margin-bottom: 10px;
+}
+
+.result-summary {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.6;
+  background: #f8f9fa;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.result-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #999;
+}
+
+.result-score {
+  padding: 2px 8px;
+  background: #e8f0fe;
+  color: #667eea;
+  border-radius: 4px;
+  font-size: 12px;
 }
 
 /* Prism.js 代码高亮样式 */
