@@ -407,36 +407,48 @@ const selectDirectory = async (dir: Directory) => {
 }
 
 const loadTree = async () => {
-  if (!selectedKB.value) return
-  
-  try {
-    const response = await axios.get(`/documents/knowledge-bases/${selectedKB.value.id}/tree/`)
-    const flatItems: any[] = []
+    if (!selectedKB.value) return
     
-    const flatten = (items: any[], parentId?: number) => {
-      items.forEach(item => {
-        flatItems.push({
-          id: item.id,
-          name: item.name,
-          type: item.type,
-          parent: parentId,
-          directory_id: selectedDirectory.value?.id,
-          folder_id: item.type === 'folder' ? item.id : undefined,
-          updated_at: item.updated_at
-        })
+    try {
+        const response = await axios.get(`/documents/knowledge-bases/${selectedKB.value.id}/tree/`)
+        const flatItems: any[] = []
+        let firstDocument: any = null
         
-        if (item.children?.length) {
-          flatten(item.children, item.id)
+        const flatten = (items: any[], parentId?: number) => {
+            items.forEach(item => {
+                const itemData = {
+                    id: item.id,
+                    name: item.name,
+                    type: item.type,
+                    parent: parentId,
+                    directory_id: selectedDirectory.value?.id,
+                    folder_id: item.type === 'folder' ? item.id : undefined,
+                    updated_at: item.updated_at
+                }
+                flatItems.push(itemData)
+                
+                // 记录第一个文档
+                if (item.type === 'document' && !firstDocument) {
+                    firstDocument = itemData
+                }
+                
+                if (item.children?.length) {
+                    flatten(item.children, item.id)
+                }
+            })
         }
-      })
+        
+        const filtered = response.data.filter((d: any) => d.id === selectedDirectory.value?.id)
+        filtered.forEach((d: any) => flatten(d.children || []))
+        currentTreeItems.value = flatItems
+        
+        // 如果有文档且当前没有选中的文档，自动选中第一个
+        if (firstDocument && !selectedFile.value) {
+            await handleItemClick(firstDocument)
+        }
+    } catch (error) {
+        console.error('Failed to load tree:', error)
     }
-    
-    const filtered = response.data.filter((d: any) => d.id === selectedDirectory.value?.id)
-    filtered.forEach((d: any) => flatten(d.children || []))
-    currentTreeItems.value = flatItems
-  } catch (error) {
-    console.error('Failed to load tree:', error)
-  }
 }
 
 const toggleExpand = (id: number) => {

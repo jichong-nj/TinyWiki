@@ -335,7 +335,7 @@ class DocumentTreeView(APIView):
                     'type': 'directory',
                     'children': self._build_folder_tree(folders, directory)
                 }
-                documents = Document.objects.filter(directory=directory, folder__isnull=True)
+                documents = Document.objects.filter(directory=directory, folder__isnull=True, publish_status='published')
                 for doc in documents:
                     dir_data['children'].append({
                         'id': doc.id,
@@ -361,7 +361,7 @@ class DocumentTreeView(APIView):
                 'type': 'folder',
                 'children': self._build_folder_tree(children, directory)
             }
-            documents = Document.objects.filter(folder=folder)
+            documents = Document.objects.filter(folder=folder, publish_status='published')
             for doc in documents:
                 folder_data['children'].append({
                     'id': doc.id,
