@@ -247,8 +247,11 @@
           :show-file-list="false"
           accept=".zip"
           class="zip-upload-demo"
+          :disabled="parsingZip"
         >
-          <el-button type="primary" icon="Upload">选择ZIP文件</el-button>
+          <el-button type="primary" icon="Upload" :loading="parsingZip" :disabled="parsingZip">
+            {{ parsingZip ? '解析中...' : '选择ZIP文件' }}
+          </el-button>
           <template #tip>
             <div class="upload-tip">
               选择一个.zip文件，支持包含文件夹结构
@@ -263,13 +266,7 @@
         <div v-if="zipFile" class="selected-zip-file">
           <el-icon class="zip-icon"><Files /></el-icon>
           <span class="zip-name">{{ zipFile.name }}</span>
-          <el-button type="text" size="small" @click="clearZipFile">移除</el-button>
-        </div>
-        
-        <div v-if="zipFile" class="upload-action">
-          <el-button type="primary" @click="uploadAndParseZip" :loading="parsingZip">
-            {{ parsingZip ? '解析中...' : '解析ZIP文件' }}
-          </el-button>
+          <el-button type="text" size="small" @click="clearZipFile" :disabled="parsingZip">移除</el-button>
         </div>
       </div>
       
@@ -786,6 +783,10 @@ function publishDocument(id: number) {
 // ZIP 导入相关方法
 function handleZipFileChange(file: any) {
   zipFile.value = file.raw
+  // 选择文件后自动解析
+  if (zipFile.value) {
+    uploadAndParseZip()
+  }
 }
 
 function clearZipFile() {
@@ -811,12 +812,7 @@ async function uploadAndParseZip() {
     const formData = new FormData()
     formData.append('zip_file', zipFile.value)
     
-    const response = await axios.post('/documents/zip/upload/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-      }
-    })
+    const response = await axios.post('/documents/zip/upload/', formData)
     
     // 按照相对路径排序，让嵌套结构更清晰
     const files = response.data.files.sort((a: any, b: any) => {
@@ -888,12 +884,7 @@ async function startZipImport() {
       selectedFolder: selectedFolder.value
     })
     
-    const response = await axios.post('/documents/zip/import/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-      }
-    })
+    const response = await axios.post('/documents/zip/import/', formData)
     
     console.log('导入响应:', response.data)
     

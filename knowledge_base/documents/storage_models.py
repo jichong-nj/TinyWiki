@@ -53,8 +53,16 @@ class FileStorage(models.Model):
     def get_md5(cls, file_obj):
         """计算文件MD5"""
         md5 = hashlib.md5()
-        for chunk in file_obj.chunks():
-            md5.update(chunk)
+        if hasattr(file_obj, 'chunks'):
+            # Django File对象
+            for chunk in file_obj.chunks():
+                md5.update(chunk)
+        else:
+            # BytesIO对象
+            file_obj.seek(0)
+            for chunk in iter(lambda: file_obj.read(4096), b''):
+                md5.update(chunk)
+            file_obj.seek(0)
         return md5.hexdigest()
     
     @classmethod

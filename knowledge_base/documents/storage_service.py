@@ -18,7 +18,7 @@ class StorageService:
         保存文件
         
         Args:
-            file_obj: 文件对象 (django上传的File对象)
+            file_obj: 文件对象 (django上传的File对象 或 BytesIO对象)
             storage_type: 存储类型
             document: 关联文档
             original_name: 原始文件名
@@ -53,7 +53,7 @@ class StorageService:
         full_path.mkdir(parents=True, exist_ok=True)
         
         # 保存文件
-        file_name = original_name or file_obj.name if file_obj else f"{md5_hash}.txt"
+        file_name = original_name or (file_obj.name if hasattr(file_obj, 'name') else f"{md5_hash}.txt")
         file_path = full_path / file_name
         
         if content is not None:
@@ -63,10 +63,26 @@ class StorageService:
             file_type = file_name.split('.')[-1].lower() if '.' in file_name else 'txt'
             mime_type = 'text/plain'
         else:
+            # 保存文件 - 支持Django File对象和BytesIO对象
             with open(file_path, 'wb+') as destination:
-                for chunk in file_obj.chunks():
-                    destination.write(chunk)
-            file_size = file_obj.size
+                if hasattr(file_obj, 'chunks'):
+                    # Django File对象
+                    for chunk in file_obj.chunks():
+                        destination.write(chunk)
+                else:
+                    # BytesIO对象
+                    file_obj.seek(0)
+                    destination.write(file_obj.read())
+            
+            # 获取文件大小
+            if hasattr(file_obj, 'size'):
+                file_size = file_obj.size
+            else:
+                # BytesIO对象
+                file_obj.seek(0, 2)  # 移动到末尾
+                file_size = file_obj.tell()
+                file_obj.seek(0)  # 重置到开头
+            
             file_type = file_name.split('.')[-1].lower() if '.' in file_name else ''
             mime_type = file_obj.content_type if hasattr(file_obj, 'content_type') else ''
         

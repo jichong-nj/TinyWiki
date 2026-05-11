@@ -31,6 +31,8 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
 
 class DocumentSerializer(serializers.ModelSerializer):
     current_version = serializers.SerializerMethodField()
+    directory = serializers.PrimaryKeyRelatedField(queryset=Directory.objects.all(), allow_null=True, required=False)
+    folder = serializers.PrimaryKeyRelatedField(queryset=Folder.objects.all(), allow_null=True, required=False)
     
     class Meta:
         model = Document

@@ -601,51 +601,92 @@ import io
 
 def _handle_single_file_import(file_obj, directory_id, folder_id, user):
     """处理单个文件导入的通用逻辑，供单文件上传和ZIP导入共同使用"""
+    print(f'_handle_single_file_import 开始: directory_id={directory_id}, folder_id={folder_id}')
+    
     # 创建新文档
     filename = file_obj.name
     title = filename.rsplit('.', 1)[0] if '.' in filename else filename
+    file_ext = os.path.splitext(filename)[1].lower()
     
-    data = {
-        'title': title,
-        'filename': filename,
-        'content': '',
-        'directory': directory_id,
-        'folder': folder_id
-    }
+    # 对于md和txt文件，直接读取内容
+    initial_content = ''
+    if file_ext in ['.md', '.txt']:
+        try:
+            if hasattr(file_obj, 'seek'):
+                file_obj.seek(0)
+                content_bytes = file_obj.read()
+                initial_content = content_bytes.decode('utf-8')
+                print(f'直接读取文件内容，长度: {len(initial_content)}')
+        except Exception as e:
+            print(f'读取文件内容失败: {e}')
     
-    serializer = DocumentSerializer(data=data)
-    if not serializer.is_valid():
+    # 直接创建Document对象，避免序列化器问题
+    try:
+        directory = None
+        if directory_id:
+            directory = Directory.objects.get(id=directory_id)
+        
+        folder = None
+        if folder_id:
+            folder = Folder.objects.get(id=folder_id)
+        
+        document = Document.objects.create(
+            title=title,
+            filename=filename,
+            content=initial_content,  # 直接设置初始内容
+            directory=directory,
+            folder=folder
+        )
+        print(f'创建Document对象成功: {document.id}, 初始内容长度: {len(initial_content)}')
+        
+        # 创建文档版本
+        DocumentVersion.objects.create(
+            document=document,
+            version_number=1,
+            content=initial_content,  # 也设置到version中
+            modified_by=user
+        )
+        print('创建DocumentVersion成功')
+        
+        # 保存原始文件
+        file_storage = StorageService.save_file(
+            file_obj=file_obj,
+            storage_type='original',
+            document=document,
+            original_name=filename
+        )
+        print(f'保存文件成功: {file_storage.id}')
+        print(f'file_storage.document_id: {file_storage.document_id}')
+        
+        # 确保file_storage正确关联了document
+        if file_storage.document_id != document.id:
+            print(f'更新file_storage的document关联')
+            file_storage.document = document
+            file_storage.save()
+        
+        # 对于非md/txt文件，还是需要转换
+        if file_ext not in ['.md', '.txt']:
+            print('开始转换...')
+            result = DocumentConverter.convert_async(file_storage.id)
+            print(f'转换结果: {result}')
+            
+            # 重新从数据库获取document，确保内容已更新
+            document.refresh_from_db()
+            print(f'转换后文档内容长度: {len(document.content)}')
+        
+        return {
+            'success': True,
+            'document': document,
+            'file_storage': file_storage
+        }
+    except Exception as e:
+        import traceback
+        print(f'_handle_single_file_import 错误: {str(e)}')
+        print(traceback.format_exc())
         return {
             'success': False,
-            'error': serializer.errors
+            'error': str(e)
         }
-    
-    document = serializer.save()
-    
-    # 创建文档版本
-    DocumentVersion.objects.create(
-        document=document,
-        version_number=1,
-        content='',
-        modified_by=user
-    )
-    
-    # 保存原始文件
-    file_storage = StorageService.save_file(
-        file_obj=file_obj,
-        storage_type='original',
-        document=document,
-        original_name=filename
-    )
-    
-    # 开始转换
-    DocumentConverter.convert_async(file_storage.id)
-    
-    return {
-        'success': True,
-        'document': document,
-        'file_storage': file_storage
-    }
 
 
 class FileUploadView(APIView):
@@ -1261,10 +1302,21 @@ class ZipUploadView(APIView):
     }
     
     def post(self, request):
-        if 'zip_file' not in request.FILES:
-            return Response({'error': '没有上传zip文件'}, status=status.HTTP_400_BAD_REQUEST)
+        print('=== ZipUploadView POST 开始 ===')
+        print('request.FILES:', request.FILES)
+        print('request.FILES keys:', list(request.FILES.keys()))
+        print('request.POST:', request.POST)
         
-        zip_file = request.FILES['zip_file']
+        if 'zip_file' not in request.FILES:
+            # 尝试查找其他可能的key名
+            if len(request.FILES) > 0:
+                first_key = list(request.FILES.keys())[0]
+                print(f'找到文件，key是: {first_key}')
+                zip_file = request.FILES[first_key]
+            else:
+                return Response({'error': '没有上传zip文件'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            zip_file = request.FILES['zip_file']
         
         # 检查文件类型
         if not zip_file.name.endswith('.zip'):
@@ -1381,7 +1433,8 @@ class ZipImportView(APIView):
         zip_file = request.FILES['zip_file']
         
         # 处理selected_files，支持JSON字符串和列表
-        selected_files_raw = request.data.get('selected_files', '[]')
+        # 先从request.POST获取，因为FormData数据在这里
+        selected_files_raw = request.POST.get('selected_files', '[]')
         if isinstance(selected_files_raw, str):
             import json
             try:
@@ -1393,8 +1446,15 @@ class ZipImportView(APIView):
         
         print('selected_files:', selected_files)
         
-        directory_id = request.data.get('directory_id')
-        folder_id = request.data.get('folder_id')
+        # 获取directory_id和folder_id
+        directory_id = request.POST.get('directory_id')
+        folder_id = request.POST.get('folder_id')
+        
+        # 如果POST中没有，尝试从data获取
+        if not directory_id and hasattr(request, 'data'):
+            directory_id = request.data.get('directory_id')
+        if not folder_id and hasattr(request, 'data'):
+            folder_id = request.data.get('folder_id')
         
         print('directory_id:', directory_id)
         print('folder_id:', folder_id)

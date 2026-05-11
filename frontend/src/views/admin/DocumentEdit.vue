@@ -23,6 +23,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from '../../axios'
+import { ElMessage } from 'element-plus'
 import MarkdownEditor from '../../components/MarkdownEditor.vue'
 
 interface Document {
@@ -43,7 +44,8 @@ const documentData = ref<Document | null>(null)
 const form = reactive({
   title: '',
   content: '',
-  directory: 1
+  directory: null,
+  folder: null
 })
 
 function goBack() {
@@ -56,13 +58,21 @@ function goBack() {
 
 function loadDocument() {
   if (!isNew.value) {
+    console.log('开始加载文档，ID:', route.params.id)
     axios.get(`/documents/documents/${route.params.id}/`)
       .then(response => {
+        console.log('文档加载成功:', response.data)
         documentData.value = response.data
         form.title = response.data.title
         form.content = response.data.content || ''
+        form.directory = response.data.directory
+        form.folder = response.data.folder
+        console.log('设置表单:', form)
       })
-      .catch(error => console.error('加载文档失败:', error))
+      .catch(error => {
+        console.error('加载文档失败:', error)
+        ElMessage.error('加载文档失败，请查看控制台')
+      })
   }
 }
 
@@ -71,23 +81,32 @@ function saveDraft() {
     title: form.title,
     content: form.content,
     directory: form.directory,
-    filename: form.title.toLowerCase().replace(/\s+/g, '-') + '.md'
+    folder: form.folder,
+    filename: documentData.value?.filename || (form.title.toLowerCase().replace(/\s+/g, '-') + '.md')
   }
+  
+  console.log('保存草稿，数据:', data)
   
   if (isNew.value) {
     axios.post('/documents/documents/', data)
       .then(() => {
-        alert('保存成功')
+        ElMessage.success('保存成功')
         goBack()
       })
-      .catch(error => console.error('保存失败:', error))
+      .catch(error => {
+        console.error('保存失败:', error)
+        ElMessage.error('保存失败')
+      })
   } else {
     axios.put(`/documents/documents/${route.params.id}/`, data)
       .then(() => {
-        alert('保存成功')
+        ElMessage.success('保存成功')
         goBack()
       })
-      .catch(error => console.error('保存失败:', error))
+      .catch(error => {
+        console.error('保存失败:', error)
+        ElMessage.error('保存失败')
+      })
   }
 }
 
@@ -96,8 +115,11 @@ function saveAndPublish() {
     title: form.title,
     content: form.content,
     directory: form.directory,
-    filename: form.title.toLowerCase().replace(/\s+/g, '-') + '.md'
+    folder: form.folder,
+    filename: documentData.value?.filename || (form.title.toLowerCase().replace(/\s+/g, '-') + '.md')
   }
+  
+  console.log('保存并发布，数据:', data)
   
   if (isNew.value) {
     axios.post('/documents/documents/', data)
@@ -105,21 +127,27 @@ function saveAndPublish() {
         const docId = response.data.id
         axios.post(`/documents/documents/${docId}/publish/`)
           .then(() => {
-            alert('发布成功')
+            ElMessage.success('发布成功')
             goBack()
           })
       })
-      .catch(error => console.error('发布失败:', error))
+      .catch(error => {
+        console.error('发布失败:', error)
+        ElMessage.error('发布失败')
+      })
   } else {
     axios.put(`/documents/documents/${route.params.id}/`, data)
       .then(() => {
         axios.post(`/documents/documents/${route.params.id}/publish/`)
           .then(() => {
-            alert('发布成功')
+            ElMessage.success('发布成功')
             goBack()
           })
       })
-      .catch(error => console.error('发布失败:', error))
+      .catch(error => {
+        console.error('发布失败:', error)
+        ElMessage.error('发布失败')
+      })
   }
 }
 

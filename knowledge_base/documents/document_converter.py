@@ -26,10 +26,21 @@ class DocumentConverter:
         Returns:
             dict: 转换结果
         """
+        print(f'[DocumentConverter.convert] 开始转换，file_storage_id={file_storage_id}')
         try:
             file_storage = StorageService.get_file_by_id(file_storage_id)
             if not file_storage:
+                print(f'[DocumentConverter.convert] 文件不存在')
                 return {'success': False, 'error': '文件不存在'}
+            
+            print(f'[DocumentConverter.convert] 找到文件: {file_storage.file_name}, 类型: {file_storage.file_type}')
+            print(f'[DocumentConverter.convert] 文件路径: {file_storage.full_path}')
+            print(f'[DocumentConverter.convert] 关联文档: {file_storage.document_id}')
+            
+            # 检查文件是否存在
+            if not os.path.exists(file_storage.full_path):
+                print(f'[DocumentConverter.convert] 文件不存在于磁盘: {file_storage.full_path}')
+                return {'success': False, 'error': '文件不存在于磁盘'}
             
             # 创建转换记录
             conversion = DocumentConversion.objects.create(
@@ -66,11 +77,14 @@ class DocumentConverter:
             conversion.completed_at = timezone.now()
             conversion.save()
             
+            print(f'[DocumentConverter.convert] 转换完成，结果: {result}')
             return result
             
         except Exception as e:
             import traceback
-            return {'success': False, 'error': f'转换失败: {str(e)}\n{traceback.format_exc()}'}
+            error_msg = f'转换失败: {str(e)}\n{traceback.format_exc()}'
+            print(f'[DocumentConverter.convert] {error_msg}')
+            return {'success': False, 'error': error_msg}
     
     @classmethod
     def convert_async(cls, file_storage_id):
@@ -294,10 +308,18 @@ class DocumentConverter:
         Returns:
             dict: 转换结果
         """
+        print(f'[_convert_text] 开始转换文本文件: {file_storage.file_name}')
         try:
             # 直接读取文件内容
+            print(f'[_convert_text] 读取文件: {file_storage.full_path}')
             with open(file_storage.full_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+            
+            print(f'[_convert_text] 读取到内容长度: {len(content)}')
+            if len(content) > 200:
+                print(f'[_convert_text] 内容预览: {content[:200]}...')
+            else:
+                print(f'[_convert_text] 内容: {content}')
             
             # 如果是txt文件，添加标题
             if file_storage.file_type.lower() == 'txt':
@@ -316,14 +338,19 @@ class DocumentConverter:
             
             # 更新文档内容（如果有关联文档）
             if file_storage.document:
+                print(f'[_convert_text] 更新文档内容，文档ID: {file_storage.document.id}')
                 file_storage.document.content = content
                 file_storage.document.save()
+                print(f'[_convert_text] 文档内容已更新，当前内容长度: {len(file_storage.document.content)}')
+            else:
+                print(f'[_convert_text] 没有关联的文档')
             
             conversion_info = {
                 'method': 'direct',
                 'content_length': len(content)
             }
             
+            print(f'[_convert_text] 转换完成，返回成功')
             return {
                 'success': True,
                 'converted_file': converted_file,
