@@ -4,6 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
 import os
+from .models import AIConfig
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
 AI_CONFIG_FILE = os.path.join(CONFIG_DIR, 'ai_config.json')
@@ -48,6 +49,86 @@ def init_config_dir():
         }
         with open(SYSTEM_CONFIG_FILE, 'w') as f:
             json.dump(default_system_config, f, indent=2)
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def ai_config(request):
+    """Get or save AI configuration"""
+    if request.method == 'GET':
+        try:
+            # Try to get from database first
+            config = AIConfig.objects.first()
+            if config:
+                return JsonResponse({
+                    'success': True,
+                    'data': config.to_dict()
+                })
+            
+            # Fallback to file if no database record
+            init_config_dir()
+            if os.path.exists(AI_CONFIG_FILE):
+                with open(AI_CONFIG_FILE, 'r') as f:
+                    data = json.load(f)
+                return JsonResponse({
+                    'success': True,
+                    'data': data
+                })
+            
+            # Return default
+            return JsonResponse({
+                'success': True,
+                'data': {
+                    "textGeneration": {
+                        "provider": "openai",
+                        "apiKey": "",
+                        "baseUrl": "https://api.openai.com/v1",
+                        "modelName": "gpt-4o",
+                        "temperature": 0.7
+                    },
+                    "embedding": {
+                        "provider": "openai",
+                        "apiKey": "",
+                        "baseUrl": "https://api.openai.com/v1",
+                        "modelName": "text-embedding-3-large",
+                        "dimension": 1024,
+                        "inputType": "query"
+                    },
+                    "rerank": {
+                        "provider": "cohere",
+                        "apiKey": "",
+                        "baseUrl": "https://api.cohere.com/v1",
+                        "modelName": "rerank-english-v3.0"
+                    }
+                }
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'获取配置失败: {str(e)}'
+            })
+    else:  # POST
+        try:
+            init_config_dir()
+            data = json.loads(request.body.decode('utf-8'))
+            
+            # Save to database
+            config = AIConfig.from_dict(data)
+            config.save()
+            
+            # Also save to file for backward compatibility
+            with open(AI_CONFIG_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'AI配置保存成功'
+            })
+        
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'保存失败: {str(e)}'
+            })
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -102,12 +183,13 @@ def test_model(request):
             embedding_params = {
                 'input': ["What is the capital of France?"],
                 'model': model_name,
-                'encoding_format': "float"
+                'encoding_format': "float",
+                'timeout': 60.0
             }
             
             if input_type:
-                embedding_params['input_type'] = input_type
-                print(f"[DEBUG] test_model - Adding input_type: {input_type}")
+                embedding_params['extra_body'] = {"input_type": input_type}
+                print(f"[DEBUG] test_model - Adding input_type to extra_body: {input_type}")
             
             try:
                 response = client.embeddings.create(**embedding_params)
@@ -115,18 +197,18 @@ def test_model(request):
                 print(f"[DEBUG] test_model - Embedding dimension: {len(embedding)}")
             except Exception as e:
                 print(f"[DEBUG] test_model - First attempt failed: {str(e)}")
-                if 'input_type' not in embedding_params:
-                    print(f"[DEBUG] test_model - Trying with input_type=query")
-                    embedding_params['input_type'] = 'query'
+                if 'extra_body' not in embedding_params:
+                    print(f"[DEBUG] test_model - Trying with extra_body={{input_type: query}}")
+                    embedding_params['extra_body'] = {"input_type": "query"}
                     response = client.embeddings.create(**embedding_params)
                     embedding = response.data[0].embedding
-                    print(f"[DEBUG] test_model - Embedding dimension (with input_type): {len(embedding)}")
-                elif 'truncate' not in embedding_params.get('extra_body', {}):
+                    print(f"[DEBUG] test_model - Embedding dimension (with extra_body): {len(embedding)}")
+                elif 'truncate' not in embedding_params['extra_body']:
                     print(f"[DEBUG] test_model - Trying with extra_body={{truncate: NONE}}")
                     embedding_params['extra_body'] = {"truncate": "NONE"}
                     response = client.embeddings.create(**embedding_params)
                     embedding = response.data[0].embedding
-                    print(f"[DEBUG] test_model - Embedding dimension (with extra_body): {len(embedding)}")
+                    print(f"[DEBUG] test_model - Embedding dimension (with truncate): {len(embedding)}")
                 else:
                     raise
         
@@ -170,43 +252,47 @@ def test_model(request):
         })
 
 @csrf_exempt
-@require_http_methods(["POST"])
-def save_ai_config(request):
-    try:
-        init_config_dir()
-        data = json.loads(request.body.decode('utf-8'))
+@require_http_methods(["GET", "POST"])
+def system_config(request):
+    """Get or save system configuration"""
+    if request.method == 'GET':
+        try:
+            init_config_dir()
+            if os.path.exists(SYSTEM_CONFIG_FILE):
+                with open(SYSTEM_CONFIG_FILE, 'r') as f:
+                    data = json.load(f)
+                return JsonResponse({
+                    'success': True,
+                    'data': data
+                })
+            return JsonResponse({
+                'success': True,
+                'data': {
+                    "name": "知识库管理系统",
+                    "description": "企业级知识库管理系统",
+                    "language": "zh-CN"
+                }
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'获取配置失败: {str(e)}'
+            })
+    else:  # POST
+        try:
+            init_config_dir()
+            data = json.loads(request.body.decode('utf-8'))
+            
+            with open(SYSTEM_CONFIG_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+            
+            return JsonResponse({
+                'success': True,
+                'message': '系统配置保存成功'
+            })
         
-        with open(AI_CONFIG_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'AI配置保存成功'
-        })
-    
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'message': f'保存失败: {str(e)}'
-        })
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def save_system_config(request):
-    try:
-        init_config_dir()
-        data = json.loads(request.body.decode('utf-8'))
-        
-        with open(SYSTEM_CONFIG_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
-        
-        return JsonResponse({
-            'success': True,
-            'message': '系统配置保存成功'
-        })
-    
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'message': f'保存失败: {str(e)}'
-        })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'保存失败: {str(e)}'
+            })

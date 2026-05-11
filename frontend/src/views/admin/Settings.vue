@@ -9,7 +9,19 @@
         </div>
         
         <div class="ai-settings">
-          <el-card title="文本生成模型">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <div class="card-title">
+                  <el-icon color="#409EFF" size="24"><ChatDotRound /></el-icon>
+                  <span>会话模型（文本生成）</span>
+                </div>
+                <el-tag type="primary">必填</el-tag>
+              </div>
+            </template>
+            <div class="model-description">
+              用于 AI 对话、文档摘要、内容理解等文本生成任务
+            </div>
             <div class="test-result" v-if="testResults.textGeneration">
               <el-alert 
                 :title="testResults.textGeneration.success ? '测试通过' : '测试失败'" 
@@ -45,12 +57,25 @@
             
             <div class="card-actions">
               <el-button type="primary" @click="testModel('textGeneration')" :loading="loadingModels.textGeneration">
+                <el-icon><Connection /></el-icon>
                 测试连接
               </el-button>
             </div>
           </el-card>
           
-          <el-card title="Embedding 模型">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <div class="card-title">
+                  <el-icon color="#67C23A" size="24"><MagicStick /></el-icon>
+                  <span>Embedding 模型（向量化）</span>
+                </div>
+                <el-tag type="success">必填</el-tag>
+              </div>
+            </template>
+            <div class="model-description">
+              将文档和查询转换为向量，用于语义搜索和 RAG 知识库检索
+            </div>
             <div class="test-result" v-if="testResults.embedding">
               <el-alert 
                 :title="testResults.embedding.success ? '测试通过' : '测试失败'" 
@@ -93,12 +118,25 @@
             
             <div class="card-actions">
               <el-button type="primary" @click="testModel('embedding')" :loading="loadingModels.embedding">
+                <el-icon><Connection /></el-icon>
                 测试连接
               </el-button>
             </div>
           </el-card>
           
-          <el-card title="Rerank 模型">
+          <el-card>
+            <template #header>
+              <div class="card-header">
+                <div class="card-title">
+                  <el-icon color="#E6A23C" size="24"><Sort /></el-icon>
+                  <span>Rerank 模型（重排序）</span>
+                </div>
+                <el-tag type="warning">可选</el-tag>
+              </div>
+            </template>
+            <div class="model-description">
+              对初步检索结果进行重新排序，提升搜索精准度
+            </div>
             <div class="test-result" v-if="testResults.rerank">
               <el-alert 
                 :title="testResults.rerank.success ? '测试通过' : '测试失败'" 
@@ -130,14 +168,21 @@
             
             <div class="card-actions">
               <el-button type="primary" @click="testModel('rerank')" :loading="loadingModels.rerank">
+                <el-icon><Connection /></el-icon>
                 测试连接
               </el-button>
             </div>
           </el-card>
           
           <div class="settings-actions">
-            <el-button type="primary" @click="saveSettings">保存配置</el-button>
-            <el-button @click="testAllModels">测试所有模型</el-button>
+            <el-button type="primary" size="large" @click="saveSettings">
+              <el-icon><Check /></el-icon>
+              保存配置
+            </el-button>
+            <el-button size="large" @click="testAllModels">
+              <el-icon><VideoPlay /></el-icon>
+              测试所有模型
+            </el-button>
           </div>
         </div>
       </el-tab-pane>
@@ -186,39 +231,67 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import axios from '../../axios'
+import { 
+  ChatDotRound, 
+  MagicStick, 
+  Sort, 
+  Connection, 
+  Check, 
+  VideoPlay 
+} from '@element-plus/icons-vue'
 
 const activeTab = ref('ai')
 
 const aiConfig = reactive({
-  textGeneration: {
-    provider: 'openai',
-    apiKey: '',
-    baseUrl: 'https://api.openai.com/v1',
-    modelName: 'gpt-4o',
-    temperature: 0.7
-  },
-  embedding: {
-    provider: 'openai',
-    apiKey: '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',
-    baseUrl: 'https://integrate.api.nvidia.com/v1',
-    modelName: 'nvidia/nv-embedqa-e5-v5',
-    dimension: 1024,
-    inputType: 'query'
-  },
-  rerank: {
-    provider: 'cohere',
-    apiKey: '',
-    baseUrl: 'https://api.cohere.com/v1',
-    modelName: 'rerank-english-v3.0'
-  }
+    textGeneration: {
+        provider: 'openai',
+        apiKey: '',
+        baseUrl: 'https://api.openai.com/v1',
+        modelName: 'gpt-4o',
+        temperature: 0.7
+    },
+    embedding: {
+        provider: 'openai',
+        apiKey: '',
+        baseUrl: 'https://api.openai.com/v1',
+        modelName: 'text-embedding-3-large',
+        dimension: 1024,
+        inputType: 'query'
+    },
+    rerank: {
+        provider: 'cohere',
+        apiKey: '',
+        baseUrl: 'https://api.cohere.com/v1',
+        modelName: 'rerank-english-v3.0'
+    }
 })
 
 const systemConfig = reactive({
-  name: '知识库管理系统',
-  description: '企业级知识库管理系统',
-  language: 'zh-CN'
+    name: '知识库管理系统',
+    description: '企业级知识库管理系统',
+    language: 'zh-CN'
+})
+
+// Load config on mount
+onMounted(async () => {
+    try {
+        const [aiRes, systemRes] = await Promise.all([
+            axios.get('/ai/config/'),
+            axios.get('/system/config/')
+        ])
+        
+        if (aiRes.data.success && aiRes.data.data) {
+            Object.assign(aiConfig, aiRes.data.data)
+        }
+        
+        if (systemRes.data.success && systemRes.data.data) {
+            Object.assign(systemConfig, systemRes.data.data)
+        }
+    } catch (error) {
+        console.error('Failed to load config:', error)
+    }
 })
 
 const loadingModels = reactive({
@@ -364,7 +437,30 @@ function showNotification(message: string | object, type: 'success' | 'error' | 
 .ai-settings {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.model-description {
+  color: #666;
+  font-size: 14px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  margin-bottom: 16px;
 }
 
 .test-result {
@@ -380,7 +476,7 @@ function showNotification(message: string | object, type: 'success' | 'error' | 
 .settings-actions {
   margin-top: 20px;
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .test-history {

@@ -4,6 +4,6 @@ from . import views
 urlpatterns = [
     path('documents/', include('documents.urls')),
     path('ai/test-model/', views.test_model, name='test_model'),
-    path('ai/config/', views.save_ai_config, name='save_ai_config'),
-    path('system/config/', views.save_system_config, name='save_system_config'),
+    path('ai/config/', views.ai_config, name='ai_config'),
+    path('system/config/', views.system_config, name='system_config'),
 ]

@@ -1,0 +1,23 @@
+{
+  "textGeneration": {
+    "provider": "openai",
+    "apiKey": "11111",
+    "baseUrl": "http://20.20.100.203:1234/v1",
+    "modelName": "qwen3.6-35b-a3b",
+    "temperature": 0.7
+  },
+  "embedding": {
+    "provider": "openai",
+    "apiKey": "1111",
+    "baseUrl": "http://20.20.100.203:1234/v1",
+    "modelName": "bge-m3",
+    "dimension": 1024,
+    "inputType": "query"
+  },
+  "rerank": {
+    "provider": "cohere",
+    "apiKey": "",
+    "baseUrl": "https://api.cohere.com/v1",
+    "modelName": "rerank-english-v3.0"
+  }
+}

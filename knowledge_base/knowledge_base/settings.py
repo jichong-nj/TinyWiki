@@ -72,11 +72,11 @@ WSGI_APPLICATION = 'knowledge_base.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'tinywiki',
-        'USER': 'tinywiki_user',
-        'PASSWORD': 'tinywiki_password',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.getenv('POSTGRES_DB', 'tinywiki'),
+        'USER': os.getenv('POSTGRES_USER', 'tinywiki_user'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'tinywiki_password'),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
     }
 }
 
@@ -122,7 +122,7 @@ for storage_type in STORAGE_TYPES:
     storage_dir.mkdir(parents=True, exist_ok=True)
 
 # 存储文件访问URL前缀
-STORAGE_FILE_URL = 'http://localhost:8080/storage/files/'
+STORAGE_FILE_URL = '/storage/files/'
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -178,7 +178,12 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost',
+    'http://127.0.0.1',
 ]
+
+# 生产环境允许所有来源（通过 nginx 代理保护）
+CORS_ALLOW_ALL_ORIGINS = os.getenv('DEBUG', 'True') == 'True' or os.getenv('CORS_ALLOW_ALL', 'False') == 'True'
 
 CORS_ALLOW_METHODS = [
     'DELETE',

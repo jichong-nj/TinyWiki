@@ -352,11 +352,19 @@ class DocumentPublishView(APIView):
             document = Document.objects.get(pk=pk)
             if document.publish_status == 'published':
                 return Response({'error': 'Document is already published'}, status=status.HTTP_400_BAD_REQUEST)
-            document.publish_status = 'published'
-            document.analysis_status = 'analyzing'
-            document.save()
-            serializer = DocumentSerializer(document)
-            return Response(serializer.data)
+            
+            # 导入发布函数并执行
+            from .signals import publish_document
+            success, error_message = publish_document(document)
+            
+            if success:
+                serializer = DocumentSerializer(document)
+                return Response(serializer.data)
+            else:
+                return Response(
+                    {'error': f'Publish failed: {error_message}'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         except Document.DoesNotExist:
             return Response({'error': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
 
