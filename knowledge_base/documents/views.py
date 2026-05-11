@@ -1081,14 +1081,44 @@ class ChatSendMessageView(APIView):
             
             messages.append({"role": "user", "content": user_content})
             
+            # 构建请求参数，支持 Nvidia 特有的参数
+            extra_params = {}
+            # 检查模型名称是否包含 qwen，添加 nvidia 特有参数
+            if "qwen" in ai_config.text_generation_model_name.lower():
+                extra_params["top_p"] = 0.95
+            
             response = client.chat.completions.create(
                 model=ai_config.text_generation_model_name,
                 messages=messages,
                 temperature=ai_config.text_generation_temperature,
-                max_tokens=2000
+                max_tokens=2000,
+                timeout=120.0,  # 设置2分钟超时
+                **extra_params
             )
             
-            return response.choices[0].message.content
+            # 兼容不同的响应格式
+            message = response.choices[0].message
+            
+            # 方法1：优先使用 content 字段
+            if hasattr(message, 'content') and message.content is not None:
+                return message.content
+            
+            # 方法2：尝试使用 reasoning_content 字段
+            if hasattr(message, 'reasoning_content') and message.reasoning_content is not None:
+                return message.reasoning_content
+            
+            # 方法3：尝试从 model_extra 中获取
+            if hasattr(message, 'model_extra') and 'reasoning_content' in message.model_extra:
+                return message.model_extra['reasoning_content']
+            
+            # 方法4：尝试使用 model_dump 获取完整数据
+            if hasattr(message, 'model_dump'):
+                data = message.model_dump()
+                if 'reasoning_content' in data and data['reasoning_content'] is not None:
+                    return data['reasoning_content']
+            
+            # 方法5：最后的 fallback，转为字符串
+            return str(message)
             
         except Exception as e:
             return f"抱歉，生成回复时出错：{str(e)}"

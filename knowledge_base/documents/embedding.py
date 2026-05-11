@@ -122,7 +122,8 @@ def get_embedding(text: str, api_key: str, base_url: str, model_name: str, input
             input=[text],
             model=model_name,
             encoding_format="float",
-            extra_body={"input_type": input_type}
+            extra_body={"input_type": input_type},
+            timeout=60.0  # 设置60秒超时
         )
         
         embedding = response.data[0].embedding
