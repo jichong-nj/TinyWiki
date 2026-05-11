@@ -13,7 +13,7 @@ from .storage_service import StorageService
 class DocumentConverter:
     """文档转换器"""
     
-    SUPPORTED_TYPES = ['docx', 'doc', 'md', 'txt', 'pptx', 'ppt']
+    SUPPORTED_TYPES = ['docx', 'doc', 'md', 'txt', 'pptx', 'ppt', 'pdf']
     
     @classmethod
     def convert(cls, file_storage_id):
@@ -47,6 +47,8 @@ class DocumentConverter:
                 result = cls._convert_pptx(file_storage, conversion)
             elif file_type in ['md', 'txt']:
                 result = cls._convert_text(file_storage, conversion)
+            elif file_type == 'pdf':
+                result = cls._convert_pdf(file_storage, conversion)
             else:
                 result = {'success': False, 'error': f'不支持的文件类型: {file_type}'}
             
@@ -523,3 +525,276 @@ class DocumentConverter:
         except Exception as e:
             import traceback
             return {'success': False, 'error': f'PPT转换失败: {str(e)}\n{traceback.format_exc()}'}
+    
+    @classmethod
+    def _extract_pdf_text_with_pypdf2(cls, pdf_path):
+        """
+        使用 PyPDF2 提取 PDF 文本
+        
+        Args:
+            pdf_path: PDF 文件路径
+            
+        Returns:
+            tuple: (是否成功, 文本内容, 提取方法)
+        """
+        try:
+            from PyPDF2 import PdfReader
+            
+            reader = PdfReader(pdf_path)
+            text_parts = []
+            
+            for page_num, page in enumerate(reader.pages):
+                page_text = page.extract_text()
+                if page_text and page_text.strip():
+                    text_parts.append(f"\n--- 第 {page_num + 1} 页 ---\n")
+                    text_parts.append(page_text)
+            
+            full_text = ''.join(text_parts).strip()
+            if full_text and len(full_text) > 100:
+                return True, full_text, 'pypdf2-text'
+            return False, '', 'no-text'
+            
+        except Exception as e:
+            return False, '', f'error: {str(e)}'
+    
+    @classmethod
+    def _convert_pdf_with_llm(cls, pdf_path, file_storage, conversion):
+        """
+        将 PDF 转为图片，并用 LLM 提取文字
+        
+        Args:
+            pdf_path: PDF 文件路径
+            file_storage: FileStorage 对象
+            conversion: DocumentConversion 对象
+            
+        Returns:
+            dict: 转换结果
+        """
+        try:
+            from pdf2image import convert_from_path
+            from PIL import Image
+            
+            # 1. 将 PDF 转成图片
+            temp_dir = tempfile.mkdtemp()
+            try:
+                images = convert_from_path(
+                    str(pdf_path),
+                    dpi=300,
+                    fmt='png'
+                )
+                
+                # 2. 处理每一页图片
+                page_info_list = []
+                attachments = []
+                markdown_content = []
+                
+                # 标题
+                markdown_content.append(f"# {Path(file_storage.file_name).stem}\n\n")
+                
+                for idx, img in enumerate(images):
+                    page_num = idx + 1
+                    
+                    # 保存图片到临时文件
+                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                        img.save(tmp, format='PNG')
+                        tmp_path = tmp.name
+                    
+                    try:
+                        # 保存到 storage/attachments
+                        img_filename = f"page_{page_num}.png"
+                        img_file = StorageService.save_file_from_path(
+                            source_path=tmp_path,
+                            storage_type='attachment',
+                            document=file_storage.document,
+                            original_name=img_filename
+                        )
+                        attachments.append(img_file)
+                        
+                        # 简单的 OCR/LLM 占位符
+                        # 可以后续添加真正的 OCR 或 LLM 提取功能
+                        extracted_text = f"（第 {page_num} 页 - 图片已保存\n"
+                        
+                        # 保存页面信息
+                        page_info_list.append({
+                            'index': page_num,
+                            'image_file': img_file,
+                            'text': extracted_text
+                        })
+                        
+                        # 添加到 Markdown
+                        markdown_content.append(f"## 第 {page_num} 页\n\n")
+                        markdown_content.append(f"![第 {page_num} 页]({img_file.file_url})\n\n")
+                        markdown_content.append(f"{extracted_text}\n\n")
+                        
+                    finally:
+                        os.unlink(tmp_path)
+                
+                # 生成 Markdown
+                markdown_text = ''.join(markdown_content)
+                
+                # 保存转换后的 Markdown
+                converted_name = Path(file_storage.file_name).stem + '.md'
+                converted_file = StorageService.save_file(
+                    file_obj=None,
+                    storage_type='converted',
+                    document=file_storage.document,
+                    original_name=converted_name,
+                    content=markdown_text
+                )
+                
+                # 更新文档内容
+                if file_storage.document:
+                    file_storage.document.content = markdown_text
+                    file_storage.document.save()
+                
+                conversion_info = {
+                    'method': 'image-only',
+                    'pages_count': len(page_info_list),
+                    'images_count': len(attachments),
+                    'note': 'PDF 扫描版：图片已保存'
+                }
+                
+                # 清理临时目录
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+                
+                return {
+                    'success': True,
+                    'converted_file': converted_file,
+                    'info': conversion_info,
+                    'markdown': markdown_text
+                }
+                
+            except Exception as e:
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+                raise
+                
+        except Exception as e:
+            import traceback
+            return {'success': False, 'error': f'PDF 图片转换失败: {str(e)}\n{traceback.format_exc()}'}
+    
+    @classmethod
+    def _convert_pdf(cls, file_storage, conversion):
+        """
+        转换 PDF 文档
+        
+        Args:
+            file_storage: FileStorage 对象
+            conversion: DocumentConversion 对象
+            
+        Returns:
+            dict: 转换结果
+        """
+        try:
+            pdf_path = file_storage.full_path
+            
+            # 1. 先尝试用 PyPDF2 提取文本
+            success, extracted_text, method = cls._extract_pdf_text_with_pypdf2(pdf_path)
+            
+            # 2. 如果有文本，按可解析的 PDF 处理（类似 Word）
+            if success:
+                try:
+                    from PyPDF2 import PdfReader
+                    
+                    reader = PdfReader(pdf_path)
+                    
+                    # 存储提取的图片
+                    attachments = []
+                    image_map = {}
+                    
+                    # 尝试提取图片
+                    for page_num, page in enumerate(reader.pages):
+                        if '/Resources' in page and '/XObject' in page['/Resources']:
+                            xObject = page['/Resources']['/XObject'].get_object()
+                            for obj in xObject:
+                                if xObject[obj]['/Subtype'] == '/Image':
+                                    try:
+                                        data = xObject[obj]._data
+                                        img_ext = 'png'
+                                        
+                                        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{img_ext}') as f:
+                                            f.write(data)
+                                            temp_path = f.name
+                                        
+                                        try:
+                                            image_name = f"page{page_num+1}_image{len(attachments)+1}.{img_ext}"
+                                            image_file = StorageService.save_file_from_path(
+                                                source_path=temp_path,
+                                                storage_type='attachment',
+                                                document=file_storage.document,
+                                                original_name=image_name
+                                            )
+                                            
+                                            if file_storage.document:
+                                                FileAttachment.objects.create(
+                                                    document=file_storage.document,
+                                                    file_storage=image_file,
+                                                    original_name=image_name,
+                                                    description=f"从 PDF 第 {page_num+1} 页提取的图片",
+                                                    position=len(attachments)
+                                                )
+                                            
+                                            attachments.append(image_file)
+                                        finally:
+                                            os.unlink(temp_path)
+                                    except Exception as img_e:
+                                        continue
+                    
+                    # 生成 Markdown
+                    markdown_content = []
+                    markdown_content.append(f"# {Path(file_storage.file_name).stem}\n\n")
+                    markdown_content.append(extracted_text)
+                    
+                    # 如果有提取的图片，添加到最后
+                    if len(attachments) > 0:
+                        markdown_content.append("\n---\n")
+                        markdown_content.append("## 提取的图片\n\n")
+                        for img_file in attachments:
+                            markdown_content.append(f"![{img_file.file_name}]({img_file.file_url})\n\n")
+                    
+                    markdown_text = ''.join(markdown_content)
+                    
+                    # 保存转换后的 Markdown
+                    converted_name = Path(file_storage.file_name).stem + '.md'
+                    converted_file = StorageService.save_file(
+                        file_obj=None,
+                        storage_type='converted',
+                        document=file_storage.document,
+                        original_name=converted_name,
+                        content=markdown_text
+                    )
+                    
+                    # 更新文档内容
+                    if file_storage.document:
+                        file_storage.document.content = markdown_text
+                        file_storage.document.save()
+                    
+                    conversion_info = {
+                        'method': f'text-based-{method}',
+                        'attachments_count': len(attachments),
+                        'pages_count': len(reader.pages)
+                    }
+                    
+                    return {
+                        'success': True,
+                        'converted_file': converted_file,
+                        'info': conversion_info,
+                        'markdown': markdown_text
+                    }
+                    
+                except Exception as e:
+                    # 如果 PyPDF2 处理失败，回退到 LLM 图片模式
+                    import traceback
+                    print(f"PyPDF2 解析失败，回退到图片模式: {e}\n{traceback.format_exc()}")
+            
+            # 3. 没有文本或者 PyPDF2 失败，用图片 + LLM 模式
+            return cls._convert_pdf_with_llm(pdf_path, file_storage, conversion)
+            
+        except Exception as e:
+            import traceback
+            return {'success': False, 'error': f'PDF 转换失败: {str(e)}\n{traceback.format_exc()}'}

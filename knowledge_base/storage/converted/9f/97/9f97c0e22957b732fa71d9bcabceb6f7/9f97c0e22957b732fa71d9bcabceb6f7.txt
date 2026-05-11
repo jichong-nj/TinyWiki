@@ -1,0 +1,79 @@
+# 轻量版 _ v-md-editor
+
+--- 第 1 页 ---
+轻量版
+编辑器由  textarea 实现，⼗分轻量。如果对编辑器的没有较⾼的要求，推荐使⽤此组件。
+引⼊ H
+
+
+```js
+import Vue from 'vue';
+import VueMarkdownEditor from '@kang
+c/v-md-editor';
+import '@kangc/v-md-editor/lib/styl
+e/base-editor.css';
+import vuepressTheme from '@kangc/v-
+md-editor/lib/theme/vuepress.js';
+VueMarkdownEditor.use(vuepressThem
+e);
+Vue.use(VueMarkdownEditor);
+```
+## Usage
+```json
+<template>
+<v-md-editorv-model="text"heightRefrence
+ElementUi Scrollbar Component
+vuepress-plugin-container<template>
+  <v-md-editor v-model="text" h
+</template>
+<script>
+  export default {
+    data() {
+      return {
+        text: '',
+      };
+    },
+  };
+</script>
+import Vue from 'vue';
+import VMdEditor from '@kangc/v-md-editor';
+import '@kangc/v-md-editor/lib/style/base-editor.css';
+import githubTheme from '@kangc/v-md-editor/lib/theme/github.js';
+import '@kangc/v-md-editor/lib/theme/style/github.css';
+// highlightjs
+import hljs from 'highlight.js';
+VMdEditor.use(githubTheme, {jsv-md-editor2026/5/11 13:00 轻量版 | v-md-editor
+https://code-farmer-i.github.io/vue-markdown-editor/zh/examples/base-editor.html 1/3
+--- 第 2 页 ---
+在 vue3 中引⼊
+使⽤  Hljs: hljs,
+});
+Vue.use(VMdEditor);
+import { createApp } from 'vue';
+import VMdEditor from '@kangc/v-md-editor';
+import '@kangc/v-md-editor/lib/style/base-editor.css';
+import githubTheme from '@kangc/v-md-editor/lib/theme/github.js';
+import '@kangc/v-md-editor/lib/theme/style/github.css';
+// highlightjs
+import hljs from 'highlight.js';
+VMdEditor.use(githubTheme, {
+  Hljs: hljs,
+});
+const app = createApp(/*...*/);
+app.use(VMdEditor);
+<template>
+  <v-md-editor v-model="text" height="400px"></v-md-editor>
+</template>
+<script>
+export default {
+  data() {
+    return {
+      text: '',
+    };
+  },js
+vuev-md-editor2026/5/11 13:00 轻量版 | v-md-editor
+https://code-farmer-i.github.io/vue-markdown-editor/zh/examples/base-editor.html 2/3
+--- 第 3 页 ---
+进阶版  → ← 交流群};
+</script> v-md-editor2026/5/11 13:00 轻量版 | v-md-editor
+https://code-farmer-i.github.io/vue-markdown-editor/zh/examples/base-editor.html 3/3
