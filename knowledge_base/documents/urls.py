@@ -20,7 +20,13 @@ from .views import (
     FileAccessView,
     FileInfoView,
     DocumentAttachmentListView,
-    ConversionStatusView
+    ConversionStatusView,
+    BM25SearchView,
+    VectorSearchAPIView,
+    HybridSearchView,
+    ChatSessionListView,
+    ChatSessionDetailView,
+    ChatSendMessageView
 )
 
 urlpatterns = [
@@ -40,6 +46,9 @@ urlpatterns = [
     path('documents/<int:document_id>/versions/', DocumentVersionListView.as_view(), name='document-versions'),
     path('documents/search/', DocumentSearchView.as_view(), name='document-search'),
     path('documents/vector-search/', VectorSearchView.as_view(), name='vector-search'),
+    path('documents/bm25-search/', BM25SearchView.as_view(), name='bm25-search'),
+    path('documents/vector-search-new/', VectorSearchAPIView.as_view(), name='vector-search-new'),
+    path('documents/hybrid-search/', HybridSearchView.as_view(), name='hybrid-search'),
     
     path('permissions/', PermissionListView.as_view(), name='permission-list'),
     path('permissions/<int:pk>/', PermissionDetailView.as_view(), name='permission-detail'),
@@ -55,4 +64,9 @@ urlpatterns = [
     
     # 转换状态
     path('conversions/<int:conversion_id>/', ConversionStatusView.as_view(), name='conversion-status'),
+    
+    # AI 聊天
+    path('chat/sessions/', ChatSessionListView.as_view(), name='chat-session-list'),
+    path('chat/sessions/<int:pk>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
+    path('chat/sessions/<int:session_id>/send/', ChatSendMessageView.as_view(), name='chat-send-message'),
 ]

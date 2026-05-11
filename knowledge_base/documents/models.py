@@ -173,3 +173,6 @@ class Permission(models.Model):
 
 # 导入存储相关模型
 from .storage_models import FileStorage, FileAttachment, DocumentConversion
+
+# 导入聊天相关模型
+from .chat_models import ChatSession, ChatMessage

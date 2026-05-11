@@ -752,3 +752,344 @@ class ConversionStatusView(APIView):
             'completed_at': conversion.completed_at,
             'created_at': conversion.created_at
         })
+
+
+# ==================== AI Chat Views ====================
+
+from .chat_models import ChatSession, ChatMessage
+from .bm25 import search_fulltext, search_vector, search_hybrid
+from api.models import AIConfig
+import openai
+import json
+
+
+class BM25SearchView(APIView):
+    """全文检索API（使用PostgreSQL全文索引）"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        query = request.query_params.get('q', '')
+        top_k = int(request.query_params.get('top_k', 5))
+        knowledge_base_id = request.query_params.get('knowledge_base_id')
+        
+        if not query.strip():
+            return Response([])
+        
+        # 使用数据库全文索引搜索
+        results = search_fulltext(query, knowledge_base_id=knowledge_base_id, top_k=top_k)
+        
+        # 格式化结果
+        formatted_results = []
+        for doc_id, score, title, content in results:
+            # 获取文档预览（前200字符）
+            preview = content[:200] + '...' if len(content) > 200 else content
+            formatted_results.append({
+                'document_id': doc_id,
+                'title': title,
+                'content': preview,
+                'full_content': content,
+                'score': float(score)
+            })
+        
+        return Response(formatted_results)
+
+
+class VectorSearchAPIView(APIView):
+    """向量检索API"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        query = request.query_params.get('q', '')
+        top_k = int(request.query_params.get('top_k', 5))
+        knowledge_base_id = request.query_params.get('knowledge_base_id')
+        
+        if not query.strip():
+            return Response([])
+        
+        # 使用向量检索
+        results = search_vector(query, knowledge_base_id=knowledge_base_id, top_k=top_k)
+        
+        # 格式化结果
+        formatted_results = []
+        for doc_id, score, title, content in results:
+            # 获取文档预览（前200字符）
+            preview = content[:200] + '...' if len(content) > 200 else content
+            formatted_results.append({
+                'document_id': doc_id,
+                'title': title,
+                'content': preview,
+                'full_content': content,
+                'score': float(score)
+            })
+        
+        return Response(formatted_results)
+
+
+class HybridSearchView(APIView):
+    """混合检索API（全文+向量）"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        query = request.query_params.get('q', '')
+        top_k = int(request.query_params.get('top_k', 5))
+        knowledge_base_id = request.query_params.get('knowledge_base_id')
+        fulltext_weight = float(request.query_params.get('fulltext_weight', 0.5))
+        vector_weight = float(request.query_params.get('vector_weight', 0.5))
+        
+        if not query.strip():
+            return Response([])
+        
+        # 使用混合检索
+        results = search_hybrid(
+            query, 
+            knowledge_base_id=knowledge_base_id, 
+            top_k=top_k,
+            fulltext_weight=fulltext_weight,
+            vector_weight=vector_weight
+        )
+        
+        # 格式化结果
+        formatted_results = []
+        for doc_id, score, title, content in results:
+            # 获取文档预览（前200字符）
+            preview = content[:200] + '...' if len(content) > 200 else content
+            formatted_results.append({
+                'document_id': doc_id,
+                'title': title,
+                'content': preview,
+                'full_content': content,
+                'score': float(score)
+            })
+        
+        return Response(formatted_results)
+
+
+class ChatSessionListView(APIView):
+    """会话列表API"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        knowledge_base_id = request.query_params.get('knowledge_base_id')
+        
+        sessions = ChatSession.objects.filter(user=request.user)
+        if knowledge_base_id:
+            sessions = sessions.filter(knowledge_base_id=knowledge_base_id)
+        
+        results = []
+        for session in sessions:
+            latest_message = session.messages.order_by('-created_at').first()
+            results.append({
+                'id': session.id,
+                'title': session.title,
+                'knowledge_base_id': session.knowledge_base.id,
+                'knowledge_base_name': session.knowledge_base.name,
+                'latest_message': latest_message.content[:50] + '...' if latest_message else '',
+                'created_at': session.created_at.isoformat(),
+                'updated_at': session.updated_at.isoformat()
+            })
+        
+        return Response(results)
+    
+    def post(self, request):
+        knowledge_base_id = request.data.get('knowledge_base_id')
+        title = request.data.get('title', '新对话')
+        
+        if not knowledge_base_id:
+            return Response({'error': '需要指定知识库'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from .models import KnowledgeBase
+            knowledge_base = KnowledgeBase.objects.get(id=knowledge_base_id)
+        except KnowledgeBase.DoesNotExist:
+            return Response({'error': '知识库不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        session = ChatSession.objects.create(
+            user=request.user,
+            knowledge_base=knowledge_base,
+            title=title
+        )
+        
+        return Response({
+            'id': session.id,
+            'title': session.title,
+            'knowledge_base_id': knowledge_base.id,
+            'created_at': session.created_at.isoformat()
+        }, status=status.HTTP_201_CREATED)
+
+
+class ChatSessionDetailView(APIView):
+    """会话详情API"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        try:
+            session = ChatSession.objects.get(id=pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response({'error': '会话不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        messages = []
+        for msg in session.messages.all():
+            messages.append({
+                'id': msg.id,
+                'role': msg.role,
+                'content': msg.content,
+                'retrieved_documents': msg.retrieved_documents,
+                'created_at': msg.created_at.isoformat()
+            })
+        
+        return Response({
+            'id': session.id,
+            'title': session.title,
+            'knowledge_base_id': session.knowledge_base.id,
+            'knowledge_base_name': session.knowledge_base.name,
+            'messages': messages,
+            'created_at': session.created_at.isoformat(),
+            'updated_at': session.updated_at.isoformat()
+        })
+    
+    def delete(self, request, pk):
+        try:
+            session = ChatSession.objects.get(id=pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response({'error': '会话不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        session.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ChatSendMessageView(APIView):
+    """发送消息API"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, session_id):
+        try:
+            session = ChatSession.objects.get(id=session_id, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response({'error': '会话不存在'}, status=status.HTTP_404_NOT_FOUND)
+        
+        user_content = request.data.get('content', '')
+        if not user_content.strip():
+            return Response({'error': '消息内容不能为空'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 保存用户消息
+        user_message = ChatMessage.objects.create(
+            session=session,
+            role='user',
+            content=user_content
+        )
+        
+        # 使用混合检索（全文+向量）检索相关文档
+        # 如果向量检索失败，回退到全文检索
+        search_results = search_hybrid(
+            user_content, 
+            knowledge_base_id=session.knowledge_base.id, 
+            top_k=3,
+            fulltext_weight=0.4,
+            vector_weight=0.6
+        )
+        # 如果混合检索没有结果，尝试只用全文检索
+        if not search_results:
+            search_results = search_fulltext(user_content, knowledge_base_id=session.knowledge_base.id, top_k=3)
+        
+        retrieved_docs = []
+        context_parts = []
+        for i, (doc_id, score, title, content) in enumerate(search_results, 1):
+            doc_info = {
+                'document_id': doc_id,
+                'title': title,
+                'content': content,
+                'score': float(score)
+            }
+            retrieved_docs.append(doc_info)
+            context_parts.append(f"【文档{i}：{title}】\n{content}")
+        
+        context = "\n\n".join(context_parts)
+        
+        # 获取历史对话
+        history_messages = session.messages.exclude(id=user_message.id).order_by('created_at')
+        history = []
+        for msg in history_messages:
+            history.append({
+                'role': msg.role,
+                'content': msg.content
+            })
+        
+        # 生成AI回复
+        ai_response = self._generate_response(user_content, context, history)
+        
+        # 保存助手消息
+        assistant_message = ChatMessage.objects.create(
+            session=session,
+            role='assistant',
+            content=ai_response,
+            retrieved_documents=retrieved_docs
+        )
+        
+        # 更新会话标题（如果是第一条消息）
+        if session.messages.count() <= 2:
+            session.title = user_content[:30] + '...' if len(user_content) > 30 else user_content
+            session.save()
+        
+        return Response({
+            'user_message': {
+                'id': user_message.id,
+                'content': user_message.content,
+                'created_at': user_message.created_at.isoformat()
+            },
+            'assistant_message': {
+                'id': assistant_message.id,
+                'content': assistant_message.content,
+                'retrieved_documents': retrieved_docs,
+                'created_at': assistant_message.created_at.isoformat()
+            }
+        })
+    
+    def _generate_response(self, user_query: str, context: str, history: list) -> str:
+        """生成AI回复"""
+        ai_config = AIConfig.objects.first()
+        
+        if not ai_config or not ai_config.text_generation_api_key:
+            return "AI助手未配置，请先在设置中配置API密钥。"
+        
+        try:
+            client = openai.OpenAI(
+                api_key=ai_config.text_generation_api_key,
+                base_url=ai_config.text_generation_base_url
+            )
+            
+            system_prompt = """你是一个专业的知识库助手。请根据提供的文档内容回答用户的问题。
+
+回答要求：
+1. 只使用提供的文档内容进行回答，不要编造信息
+2. 如果文档中没有相关信息，请明确说明
+3. 回答要简洁准确，重点突出
+4. 可以适当引用文档内容作为依据
+5. 保持友好和专业的语气"""
+            
+            messages = [
+                {"role": "system", "content": system_prompt}
+            ]
+            
+            # 添加历史对话
+            messages.extend(history)
+            
+            # 添加当前查询和上下文
+            if context:
+                user_content = f"请根据以下文档回答我的问题：\n\n{context}\n\n我的问题是：{user_query}"
+            else:
+                user_content = user_query
+            
+            messages.append({"role": "user", "content": user_content})
+            
+            response = client.chat.completions.create(
+                model=ai_config.text_generation_model_name,
+                messages=messages,
+                temperature=ai_config.text_generation_temperature,
+                max_tokens=2000
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            return f"抱歉，生成回复时出错：{str(e)}"
+
