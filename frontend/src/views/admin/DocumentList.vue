@@ -320,7 +320,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
 import { ElMessage } from 'element-plus'
-import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose, Upload, Folder, Check, Close } from '@element-plus/icons-vue'
+import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose, Upload, Folder } from '@element-plus/icons-vue'
 
 interface Document {
   id: number
@@ -622,7 +622,7 @@ function cancelImport() {
   fileIdCounter = 0
 }
 
-function handleFileChange(file: any, fileList: any[]) {
+function handleFileChange(_file: any, fileList: any[]) {
   const newFiles = fileList.map(f => f.raw)
   
   const existingNames = new Set(importFiles.value.map(item => item.file.name))
@@ -711,14 +711,6 @@ async function startUpload() {
   } finally {
     uploading.value = false
   }
-}
-
-function handleUploadSuccess() {
-  loadDocuments()
-}
-
-function handleUploadError() {
-  console.error('上传失败')
 }
 
 function editFolder(folder: Folder) {

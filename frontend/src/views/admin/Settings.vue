@@ -273,7 +273,7 @@ function testModel(modelType: 'textGeneration' | 'embedding' | 'rerank') {
     model_name: config.modelName
   }
   
-  if (modelType === 'embedding' && config.inputType) {
+  if (modelType === 'embedding' && 'inputType' in config && config.inputType) {
     postData.input_type = config.inputType
   }
   

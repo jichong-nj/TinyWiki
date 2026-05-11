@@ -227,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import axios from '../../axios'
 import { marked } from 'marked'
 import AIChat from '../../components/AIChat.vue'
@@ -524,6 +524,9 @@ interface SearchResult {
   filename: string
   content: string
   updated_at: string
+  path?: string
+  summary?: string
+  rank?: number
 }
 
 const searchResults = ref<SearchResult[]>([])
