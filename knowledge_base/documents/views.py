@@ -181,7 +181,30 @@ class FolderDetailView(APIView):
     def delete(self, request, pk):
         try:
             folder = Folder.objects.get(pk=pk)
+            
+            # 递归获取所有子文件夹
+            def get_all_subfolders(folder_obj):
+                subfolders = [folder_obj]
+                for child in folder_obj.children.all():
+                    subfolders.extend(get_all_subfolders(child))
+                return subfolders
+            
+            all_folders = get_all_subfolders(folder)
+            folder_ids = [f.id for f in all_folders]
+            
+            print(f'删除文件夹 {folder.name}，包含 {len(all_folders)} 个子文件夹，及其下的所有文档')
+            
+            # 删除所有关联的文档（包括子文件夹中的）
+            documents = Document.objects.filter(folder_id__in=folder_ids)
+            doc_count = documents.count()
+            print(f'将删除 {doc_count} 个文档')
+            
+            # 删除文档
+            documents.delete()
+            
+            # 删除文件夹（会级联删除子文件夹）
             folder.delete()
+            
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Folder.DoesNotExist:
             return Response({'error': 'Folder not found'}, status=status.HTTP_404_NOT_FOUND)

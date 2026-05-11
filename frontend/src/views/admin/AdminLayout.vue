@@ -61,7 +61,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import axios from '../../axios'
-import { Document, FolderOpened, Key, Setting, CaretBottom } from '@element-plus/icons-vue'
+import { Document, FolderOpened, Setting, CaretBottom } from '@element-plus/icons-vue'
 
 interface KnowledgeBase {
   id: number
