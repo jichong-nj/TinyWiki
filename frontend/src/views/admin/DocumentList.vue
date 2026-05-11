@@ -88,7 +88,7 @@
             </div>
             
             <div class="item-right">
-              <span class="update-time">-</span>
+              <span class="update-time">{{ formatDateTime(folder.updated_at) }}</span>
               <el-dropdown trigger="click" @click.stop>
                 <el-button type="text" class="menu-btn" @click.stop>
                   <el-icon><MoreFilled /></el-icon>
@@ -114,17 +114,16 @@
               <span class="doc-name">{{ doc.filename }}</span>
             </div>
             
-            <div class="item-center">
-              <el-tag :type="doc.publish_status === 'published' ? 'success' : 'warning'" size="small">
-                {{ doc.publish_status === 'published' ? '已发布' : '未发布' }}
-              </el-tag>
-              <el-tag :type="getAnalysisTagType(doc.analysis_status)" size="small">
-                {{ getAnalysisStatusText(doc.analysis_status) }}
-              </el-tag>
-            </div>
-            
             <div class="item-right">
-              <span class="update-time">{{ doc.updated_at }}</span>
+              <div class="status-tags">
+                <el-tag :type="doc.publish_status === 'published' ? 'success' : 'warning'" size="small">
+                  {{ doc.publish_status === 'published' ? '已发布' : '未发布' }}
+                </el-tag>
+                <el-tag :type="getAnalysisTagType(doc.analysis_status)" size="small">
+                  {{ getAnalysisStatusText(doc.analysis_status) }}
+                </el-tag>
+              </div>
+              <span class="update-time">{{ formatDateTime(doc.updated_at) }}</span>
               <el-dropdown trigger="click" @click.stop>
                 <el-button type="text" class="menu-btn" @click.stop>
                   <el-icon><MoreFilled /></el-icon>
@@ -231,6 +230,7 @@ interface Folder {
   name: string
   directory: number
   parent: number | null
+  updated_at: string
 }
 
 const router = useRouter()
@@ -284,6 +284,20 @@ function getAnalysisStatusText(status: string) {
     case 'analyzing': return '分析中'
     default: return '未分析'
   }
+}
+
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return '-'
+  
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
 function loadDocuments() {
@@ -870,6 +884,12 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.status-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .update-time {
