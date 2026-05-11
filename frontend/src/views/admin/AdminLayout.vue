@@ -159,11 +159,14 @@ onMounted(() => {
 .sidebar-footer {
   padding: 20px;
   border-top: 1px solid #3a3a4a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 
 .sidebar-footer button {
   width: 100%;
-  margin-bottom: 10px;
 }
 
 .main-content {

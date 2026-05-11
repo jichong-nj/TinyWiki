@@ -7,8 +7,16 @@
     <el-table :data="knowledgeBases" border>
       <el-table-column prop="name" label="名称" />
       <el-table-column prop="description" label="描述" />
-      <el-table-column prop="created_at" label="创建时间" />
-      <el-table-column prop="updated_at" label="更新时间" />
+      <el-table-column label="创建时间">
+        <template #default="scope">
+          {{ formatDateTime(scope.row.created_at) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="更新时间">
+        <template #default="scope">
+          {{ formatDateTime(scope.row.updated_at) }}
+        </template>
+      </el-table-column>
       <el-table-column label="操作">
         <template #default="scope">
           <el-button text @click="viewDirectories(scope.row.id)">管理目录</el-button>
@@ -192,6 +200,20 @@ function deleteDirectory(id: number) {
       })
       .catch(error => console.error('删除目录失败:', error))
   }
+}
+
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return '-'
+  
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
 onMounted(() => {

@@ -166,38 +166,68 @@
       </template>
     </el-dialog>
     
-    <el-dialog title="导入文件" v-model="showImportDialog" @close="cancelImport">
+    <el-dialog title="导入文件" v-model="showImportDialog" @close="cancelImport" width="600px">
       <div class="import-area">
-        <el-upload
-          ref="uploadRef"
-          :action="uploadUrl"
-          :headers="uploadHeaders"
-          :data="uploadData"
-          :multiple="true"
-          accept=".md,.txt,.docx,.doc,.pptx,.ppt,.pdf,.xlsx,.xls"
-          :auto-upload="false"
-          :on-change="handleFileChange"
-          :on-success="handleUploadSuccess"
-          :on-error="handleUploadError"
-          class="upload-demo"
-        >
-          <el-button type="primary" icon="Upload">选择文件</el-button>
-          <template #tip>
-            <div class="el-upload__tip">支持 .md, .txt, .docx, .doc, .pptx, .ppt, .pdf, .xlsx, .xls 格式文件，可多选</div>
-          </template>
-        </el-upload>
+        <div class="upload-drop-zone">
+          <el-upload
+            ref="uploadRef"
+            :action="uploadUrl"
+            :headers="uploadHeaders"
+            :data="uploadData"
+            :multiple="true"
+            accept=".md,.txt,.docx,.doc,.pptx,.ppt,.pdf,.xlsx,.xls"
+            :auto-upload="false"
+            :on-change="handleFileChange"
+            :show-file-list="false"
+            class="upload-demo"
+          >
+            <el-button type="primary" icon="Upload">选择文件</el-button>
+            <template #tip>
+              <div class="upload-tip">支持 .md, .txt, .docx, .doc, .pptx, .ppt, .pdf, .xlsx, .xls 格式文件，可多选</div>
+            </template>
+          </el-upload>
+        </div>
         
-        <div v-if="importFiles.length > 0" class="file-list">
-          <div v-for="(file, index) in importFiles" :key="index" class="file-item">
-            <el-icon class="file-icon"><Files /></el-icon>
-            <span class="file-name">{{ file.name }}</span>
-            <el-button type="text" size="small" @click="removeImportFile(index)">移除</el-button>
+        <div v-if="importFiles.length > 0" class="file-list-container">
+          <div class="file-list-header">
+            <span class="file-list-title">待上传文件 ({{ importFiles.length }})</span>
+            <el-button type="text" size="small" @click="clearAllFiles">清空列表</el-button>
+          </div>
+          <div class="file-list-scroll">
+            <div v-for="(item, index) in importFiles" :key="item.id" class="file-item">
+              <div class="file-icon-wrapper">
+                <el-icon v-if="item.status === 'pending'" class="file-icon"><Files /></el-icon>
+                <el-icon v-else-if="item.status === 'uploading'" class="file-icon uploading"><Loading /></el-icon>
+                <el-icon v-else-if="item.status === 'success'" class="file-icon success"><CircleCheck /></el-icon>
+                <el-icon v-else class="file-icon error"><CircleClose /></el-icon>
+              </div>
+              <div class="file-info">
+                <span class="file-name">{{ item.file.name }}</span>
+                <span v-if="item.errorMessage" class="file-error">{{ item.errorMessage }}</span>
+              </div>
+              <el-button 
+                v-if="item.status === 'pending'" 
+                type="text" 
+                size="small" 
+                class="remove-btn"
+                @click="removeImportFile(index)"
+              >
+                移除
+              </el-button>
+            </div>
           </div>
         </div>
       </div>
       <template #footer>
         <el-button @click="cancelImport">取消</el-button>
-        <el-button type="primary" @click="startUpload" :loading="uploading">开始导入</el-button>
+        <el-button 
+          type="primary" 
+          @click="startUpload" 
+          :loading="uploading"
+          :disabled="importFiles.length === 0"
+        >
+          开始导入
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -208,7 +238,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
 import { ElMessage } from 'element-plus'
-import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files } from '@element-plus/icons-vue'
+import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 
 interface Document {
   id: number
@@ -250,7 +280,16 @@ const showSubfolderDialog = ref(false)
 const newSubfolderName = ref('')
 
 const showImportDialog = ref(false)
-const importFiles = ref<File[]>([])
+
+interface ImportFileItem {
+  id: number
+  file: File
+  status: 'pending' | 'uploading' | 'success' | 'error'
+  errorMessage?: string
+}
+
+const importFiles = ref<ImportFileItem[]>([])
+let fileIdCounter = 0
 const uploadRef = ref()
 const uploading = ref(false)
 
@@ -476,28 +515,34 @@ function cancelCreateSubfolder() {
 function cancelImport() {
   showImportDialog.value = false
   importFiles.value = []
+  fileIdCounter = 0
 }
 
 function handleFileChange(file: any, fileList: any[]) {
   const newFiles = fileList.map(f => f.raw)
   
-  const uniqueFiles: File[] = []
-  const seenNames = new Set<string>()
+  const existingNames = new Set(importFiles.value.map(item => item.file.name))
   
   for (const f of newFiles) {
-    if (!seenNames.has(f.name)) {
-      seenNames.add(f.name)
-      uniqueFiles.push(f)
+    if (!existingNames.has(f.name)) {
+      importFiles.value.push({
+        id: fileIdCounter++,
+        file: f,
+        status: 'pending'
+      })
     } else {
-      alert(`文件 "${f.name}" 已存在于选择列表中，将跳过重复文件`)
+      ElMessage.warning(`文件 "${f.name}" 已存在于选择列表中，将跳过重复文件`)
     }
   }
-  
-  importFiles.value = uniqueFiles
 }
 
 function removeImportFile(index: number) {
   importFiles.value.splice(index, 1)
+}
+
+function clearAllFiles() {
+  importFiles.value = []
+  fileIdCounter = 0
 }
 
 async function startUpload() {
@@ -507,10 +552,15 @@ async function startUpload() {
   
   uploading.value = true
   
+  // 更新所有文件状态为上传中
+  importFiles.value.forEach(item => {
+    item.status = 'uploading'
+  })
+  
   try {
     const formData = new FormData()
-    importFiles.value.forEach(file => {
-      formData.append('files', file)
+    importFiles.value.forEach(item => {
+      formData.append('files', item.file)
     })
     
     if (selectedFolder.value) {
@@ -526,16 +576,36 @@ async function startUpload() {
       }
     })
     
-    const successCount = response.data.files.filter((f: any) => f.status).length
+    // 更新每个文件的状态
+    if (response.data && response.data.files) {
+      response.data.files.forEach((result: any, index: number) => {
+        if (importFiles.value[index]) {
+          if (result.status) {
+            importFiles.value[index].status = 'success'
+          } else {
+            importFiles.value[index].status = 'error'
+            importFiles.value[index].errorMessage = result.error || '上传失败'
+          }
+        }
+      })
+    }
+    
+    const successCount = importFiles.value.filter(item => item.status === 'success').length
     ElMessage.success(`成功导入 ${successCount}/${importFiles.value.length} 个文件`)
     
     loadDocuments()
-  } catch (error) {
+  } catch (error: any) {
     console.error('导入文件失败:', error)
+    
+    // 所有文件标记为失败
+    importFiles.value.forEach(item => {
+      item.status = 'error'
+      item.errorMessage = error.response?.data?.error || '上传失败'
+    })
+    
     ElMessage.error('导入文件失败')
   } finally {
     uploading.value = false
-    cancelImport()
   }
 }
 
@@ -833,34 +903,114 @@ onMounted(() => {
   padding: 10px;
 }
 
-.file-list {
-  margin-top: 15px;
-  border: 1px dashed #d9d9d9;
-  border-radius: 6px;
+.upload-drop-zone {
+  margin-bottom: 20px;
+}
+
+.upload-tip {
+  margin-top: 8px;
+  color: #666;
+  font-size: 13px;
+}
+
+.file-list-container {
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.file-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e9ecef;
+  background: white;
+}
+
+.file-list-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.file-list-scroll {
+  max-height: 300px;
+  overflow-y: auto;
   padding: 10px;
 }
 
 .file-item {
   display: flex;
   align-items: center;
-  padding: 8px;
-  margin-bottom: 5px;
-  background: #fafafa;
-  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+  transition: all 0.2s;
 }
 
 .file-item:last-child {
   margin-bottom: 0;
 }
 
+.file-item:hover {
+  border-color: #667eea;
+}
+
+.file-icon-wrapper {
+  display: flex;
+  align-items: center;
+  margin-right: 12px;
+}
+
 .file-icon {
-  color: #1890ff;
-  margin-right: 8px;
+  font-size: 20px;
+}
+
+.file-icon.uploading {
+  color: #e6a23c;
+  animation: spin 1s linear infinite;
+}
+
+.file-icon.success {
+  color: #67c23a;
+}
+
+.file-icon.error {
+  color: #f56c6c;
+}
+
+.file-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .file-name {
-  flex: 1;
-  font-size: 13px;
+  font-size: 14px;
+  color: #2c3e50;
+}
+
+.file-error {
+  font-size: 12px;
+  color: #f56c6c;
+}
+
+.remove-btn {
+  margin-left: 10px;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .upload-demo {
