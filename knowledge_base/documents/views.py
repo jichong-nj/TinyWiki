@@ -121,11 +121,30 @@ class FolderListView(APIView):
     def get(self, request):
         directory_id = request.query_params.get('directory')
         parent_id = request.query_params.get('parent')
+        
+        print(f'FolderListView查询: directory={directory_id}, parent={parent_id}')
+        
         folders = Folder.objects.all()
         if directory_id:
             folders = folders.filter(directory_id=directory_id)
-        if parent_id:
-            folders = folders.filter(parent_id=parent_id)
+        
+        # 处理parent参数，支持 null/None/空字符串 表示顶层文件夹
+        if parent_id is not None:
+            if parent_id == 'null' or parent_id == 'None' or parent_id == '':
+                # 明确请求顶层文件夹（parent为空）
+                folders = folders.filter(parent__isnull=True)
+            else:
+                # 请求特定parent的子文件夹
+                try:
+                    parent_id_int = int(parent_id)
+                    folders = folders.filter(parent_id=parent_id_int)
+                except (ValueError, TypeError):
+                    pass
+        
+        print(f'返回文件夹数量: {len(folders)}')
+        for f in folders:
+            print(f'  - 文件夹: {f.id} - {f.name}, parent: {f.parent_id}')
+        
         serializer = FolderSerializer(folders, many=True)
         return Response(serializer.data)
     
@@ -572,9 +591,61 @@ class VectorSearchView(APIView):
 from .storage_service import StorageService
 from .document_converter import DocumentConverter
 from .storage_models import FileStorage, FileAttachment, DocumentConversion
+from .serializers import DocumentSerializer
 from django.conf import settings
 from django.http import FileResponse
 import os
+import zipfile
+import io
+
+
+def _handle_single_file_import(file_obj, directory_id, folder_id, user):
+    """处理单个文件导入的通用逻辑，供单文件上传和ZIP导入共同使用"""
+    # 创建新文档
+    filename = file_obj.name
+    title = filename.rsplit('.', 1)[0] if '.' in filename else filename
+    
+    data = {
+        'title': title,
+        'filename': filename,
+        'content': '',
+        'directory': directory_id,
+        'folder': folder_id
+    }
+    
+    serializer = DocumentSerializer(data=data)
+    if not serializer.is_valid():
+        return {
+            'success': False,
+            'error': serializer.errors
+        }
+    
+    document = serializer.save()
+    
+    # 创建文档版本
+    DocumentVersion.objects.create(
+        document=document,
+        version_number=1,
+        content='',
+        modified_by=user
+    )
+    
+    # 保存原始文件
+    file_storage = StorageService.save_file(
+        file_obj=file_obj,
+        storage_type='original',
+        document=document,
+        original_name=filename
+    )
+    
+    # 开始转换
+    DocumentConverter.convert_async(file_storage.id)
+    
+    return {
+        'success': True,
+        'document': document,
+        'file_storage': file_storage
+    }
 
 
 class FileUploadView(APIView):
@@ -598,50 +669,43 @@ class FileUploadView(APIView):
                 document = Document.objects.get(id=document_id)
             except Document.DoesNotExist:
                 return Response({'error': '文档不存在'}, status=status.HTTP_404_NOT_FOUND)
+            
+            # 保存原始文件
+            file_storage = StorageService.save_file(
+                file_obj=file_obj,
+                storage_type='original',
+                document=document,
+                original_name=file_obj.name
+            )
+            
+            # 开始转换
+            result = DocumentConverter.convert_async(file_storage.id)
+            
+            return Response({
+                'file_id': file_storage.id,
+                'md5': file_storage.md5_hash,
+                'file_name': file_storage.file_name,
+                'status': result.get('success', False),
+                'conversion_result': result,
+                'document_id': document.id
+            })
+        
         elif create_document:
-            # 创建新文档
-            filename = file_obj.name
-            title = filename.rsplit('.', 1)[0] if '.' in filename else filename
+            # 使用统一的导入函数
+            result = _handle_single_file_import(file_obj, directory_id, folder_id, request.user)
             
-            data = {
-                'title': title,
-                'filename': filename,
-                'content': '',
-                'directory': directory_id,
-                'folder': folder_id
-            }
+            if not result['success']:
+                return Response(result['error'], status=status.HTTP_400_BAD_REQUEST)
             
-            serializer = DocumentSerializer(data=data)
-            if serializer.is_valid():
-                document = serializer.save()
-                DocumentVersion.objects.create(
-                    document=document,
-                    version_number=1,
-                    content='',
-                    modified_by=request.user
-                )
-            else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'file_id': result['file_storage'].id,
+                'md5': result['file_storage'].md5_hash,
+                'file_name': result['file_storage'].file_name,
+                'status': True,
+                'document_id': result['document'].id
+            })
         
-        # 保存原始文件
-        file_storage = StorageService.save_file(
-            file_obj=file_obj,
-            storage_type='original',
-            document=document,
-            original_name=file_obj.name
-        )
-        
-        # 开始转换
-        result = DocumentConverter.convert_async(file_storage.id)
-        
-        return Response({
-            'file_id': file_storage.id,
-            'md5': file_storage.md5_hash,
-            'file_name': file_storage.file_name,
-            'status': result.get('success', False),
-            'conversion_result': result,
-            'document_id': document.id if document else None
-        })
+        return Response({'error': '未指定文档或未要求创建文档'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class FileUploadMultipleView(APIView):
@@ -667,49 +731,44 @@ class FileUploadMultipleView(APIView):
                     document = Document.objects.get(id=document_id)
                 except Document.DoesNotExist:
                     continue
+                
+                # 保存原始文件
+                file_storage = StorageService.save_file(
+                    file_obj=file_obj,
+                    storage_type='original',
+                    document=document,
+                    original_name=file_obj.name
+                )
+                
+                # 开始转换
+                conversion_result = DocumentConverter.convert_async(file_storage.id)
+                
+                results.append({
+                    'file_id': file_storage.id,
+                    'md5': file_storage.md5_hash,
+                    'file_name': file_storage.file_name,
+                    'status': conversion_result.get('success', False),
+                    'document_id': document.id
+                })
+            
             elif create_document:
-                # 创建新文档
-                filename = file_obj.name
-                title = filename.rsplit('.', 1)[0] if '.' in filename else filename
+                # 使用统一的导入函数
+                import_result = _handle_single_file_import(file_obj, directory_id, folder_id, request.user)
                 
-                data = {
-                    'title': title,
-                    'filename': filename,
-                    'content': '',
-                    'directory': directory_id,
-                    'folder': folder_id
-                }
-                
-                serializer = DocumentSerializer(data=data)
-                if serializer.is_valid():
-                    document = serializer.save()
-                    DocumentVersion.objects.create(
-                        document=document,
-                        version_number=1,
-                        content='',
-                        modified_by=request.user
-                    )
+                if import_result['success']:
+                    results.append({
+                        'file_id': import_result['file_storage'].id,
+                        'md5': import_result['file_storage'].md5_hash,
+                        'file_name': import_result['file_storage'].file_name,
+                        'status': True,
+                        'document_id': import_result['document'].id
+                    })
                 else:
-                    continue
-            
-            # 保存原始文件
-            file_storage = StorageService.save_file(
-                file_obj=file_obj,
-                storage_type='original',
-                document=document,
-                original_name=file_obj.name
-            )
-            
-            # 开始转换
-            conversion_result = DocumentConverter.convert_async(file_storage.id)
-            
-            results.append({
-                'file_id': file_storage.id,
-                'md5': file_storage.md5_hash,
-                'file_name': file_storage.file_name,
-                'status': conversion_result.get('success', False),
-                'document_id': document.id if document else None
-            })
+                    results.append({
+                        'file_name': file_obj.name,
+                        'status': False,
+                        'error': import_result.get('error', '导入失败')
+                    })
         
         return Response({'files': results})
 
@@ -1189,4 +1248,310 @@ class ChatSendMessageView(APIView):
             
         except Exception as e:
             return f"抱歉，生成回复时出错：{str(e)}"
+
+
+class ZipUploadView(APIView):
+    """上传并解析zip文件API"""
+    permission_classes = [IsAuthenticated]
+    
+    # 支持的文件类型
+    SUPPORTED_EXTENSIONS = {
+        '.md', '.txt', '.docx', '.doc', '.pptx', '.ppt', 
+        '.pdf', '.xlsx', '.xls'
+    }
+    
+    def post(self, request):
+        if 'zip_file' not in request.FILES:
+            return Response({'error': '没有上传zip文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        zip_file = request.FILES['zip_file']
+        
+        # 检查文件类型
+        if not zip_file.name.endswith('.zip'):
+            return Response({'error': '只能上传zip格式的文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # 读取zip文件内容
+            zip_content = zip_file.read()
+            zip_buffer = io.BytesIO(zip_content)
+            
+            # 解析zip文件
+            file_list = []
+            skipped_count = 0
+            
+            with zipfile.ZipFile(zip_buffer, 'r') as zf:
+                # 先检查是否有顶层文件夹（所有文件是否都在同一个文件夹下）
+                all_paths = []
+                for info in zf.infolist():
+                    if info.filename.startswith('__MACOSX') or info.filename.startswith('.'):
+                        continue
+                    # 清理路径，去除末尾的/
+                    cleaned_path = info.filename.rstrip('/')
+                    if cleaned_path:
+                        all_paths.append(cleaned_path)
+                
+                print('ZIP中的所有路径:', all_paths)
+                
+                # 检查是否所有文件都在同一个顶层文件夹下
+                top_level_dir = None
+                if all_paths:
+                    first_path_parts = all_paths[0].split('/')
+                    if len(first_path_parts) > 1:  # 第一个文件有父文件夹
+                        potential_top_dir = first_path_parts[0]
+                        # 检查所有其他文件是否都在这个文件夹下
+                        all_in_same_dir = True
+                        for path in all_paths:
+                            path_parts = path.split('/')
+                            if len(path_parts) > 0 and path_parts[0] != potential_top_dir:
+                                all_in_same_dir = False
+                                break
+                        if all_in_same_dir:
+                            top_level_dir = potential_top_dir
+                            print(f'检测到顶层文件夹: {top_level_dir}')
+                
+                # 现在处理文件
+                for info in zf.infolist():
+                    # 跳过目录项和隐藏文件
+                    if info.is_dir() or info.filename.startswith('__MACOSX') or info.filename.startswith('.'):
+                        continue
+                    
+                    # 获取文件路径信息
+                    original_path = info.filename.rstrip('/')
+                    path_parts = original_path.split('/')
+                    filename = path_parts[-1]
+                    
+                    # 跳过空文件名
+                    if not filename:
+                        continue
+                    
+                    # 检查文件扩展名是否支持
+                    file_ext = os.path.splitext(filename)[1].lower()
+                    if file_ext not in self.SUPPORTED_EXTENSIONS:
+                        skipped_count += 1
+                        continue
+                    
+                    # 构建相对路径（不包含文件名）
+                    # 如果有顶层文件夹，我们保留它
+                    relative_path = '/'.join(path_parts[:-1]) if len(path_parts) > 1 else ''
+                    
+                    print(f'处理文件: {original_path} -> 相对路径: {relative_path}, 文件名: {filename}')
+                    
+                    file_list.append({
+                        'filename': filename,
+                        'path': original_path,  # 使用原始路径作为唯一标识
+                        'relative_path': relative_path,
+                        'size': info.file_size,
+                        'selected': True  # 默认选中
+                    })
+            
+            return Response({
+                'files': file_list,
+                'total_files': len(file_list),
+                'skipped_count': skipped_count
+            })
+            
+        except zipfile.BadZipFile:
+            return Response({'error': '无效的zip文件'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            import traceback
+            print(f'解析ZIP出错: {str(e)}')
+            print(traceback.format_exc())
+            return Response({'error': f'解析zip文件失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ZipImportView(APIView):
+    """执行zip文件导入API"""
+    permission_classes = [IsAuthenticated]
+    
+    # 支持的文件类型（与 ZipUploadView 保持一致）
+    SUPPORTED_EXTENSIONS = {
+        '.md', '.txt', '.docx', '.doc', '.pptx', '.ppt', 
+        '.pdf', '.xlsx', '.xls'
+    }
+    
+    def post(self, request):
+        print('=== ZipImportView POST 开始 ===')
+        print('request.FILES:', request.FILES)
+        print('request.POST:', request.POST)
+        print('request.data:', request.data)
+        
+        if 'zip_file' not in request.FILES:
+            return Response({'error': '没有上传zip文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        zip_file = request.FILES['zip_file']
+        
+        # 处理selected_files，支持JSON字符串和列表
+        selected_files_raw = request.data.get('selected_files', '[]')
+        if isinstance(selected_files_raw, str):
+            import json
+            try:
+                selected_files = json.loads(selected_files_raw)
+            except:
+                selected_files = []
+        else:
+            selected_files = selected_files_raw or []
+        
+        print('selected_files:', selected_files)
+        
+        directory_id = request.data.get('directory_id')
+        folder_id = request.data.get('folder_id')
+        
+        print('directory_id:', directory_id)
+        print('folder_id:', folder_id)
+        
+        if not selected_files:
+            return Response({'error': '没有选择要导入的文件'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 获取目录
+        directory = None
+        if directory_id:
+            try:
+                # 确保是整数
+                dir_id = int(directory_id)
+                directory = Directory.objects.get(id=dir_id)
+                print('找到目录:', directory)
+            except Directory.DoesNotExist:
+                return Response({'error': '目录不存在'}, status=status.HTTP_400_BAD_REQUEST)
+            except ValueError:
+                return Response({'error': '无效的目录ID'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 获取当前文件夹
+        current_folder = None
+        if folder_id:
+            try:
+                # 确保是整数
+                fld_id = int(folder_id)
+                current_folder = Folder.objects.get(id=fld_id)
+                print('找到文件夹:', current_folder)
+                if not directory:
+                    directory = current_folder.directory
+            except Folder.DoesNotExist:
+                return Response({'error': '文件夹不存在'}, status=status.HTTP_400_BAD_REQUEST)
+            except ValueError:
+                return Response({'error': '无效的文件夹ID'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not directory:
+            return Response({'error': '请选择要导入到的目录'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            zip_content = zip_file.read()
+            zip_buffer = io.BytesIO(zip_content)
+            
+            results = []
+            # 清理selected_paths中的路径
+            cleaned_selected_paths = set()
+            for path in selected_files:
+                cleaned_selected_paths.add(path.rstrip('/'))
+            print(f'清理后的选中路径: {cleaned_selected_paths}')
+            
+            with zipfile.ZipFile(zip_buffer, 'r') as zf:
+                for info in zf.infolist():
+                    # 清理当前文件的路径
+                    cleaned_current_path = info.filename.rstrip('/')
+                    
+                    if info.is_dir() or cleaned_current_path not in cleaned_selected_paths:
+                        continue
+                    
+                    # 获取文件名
+                    path_parts = cleaned_current_path.split('/')
+                    filename = path_parts[-1]
+                    
+                    # 再次检查文件扩展名（安全措施）
+                    file_ext = os.path.splitext(filename)[1].lower()
+                    if file_ext not in self.SUPPORTED_EXTENSIONS:
+                        continue
+                    
+                    try:
+                        print(f"\n=== 开始处理文件: {cleaned_current_path} ===")
+                        
+                        # 解析路径
+                        relative_path_parts = path_parts[:-1] if len(path_parts) > 1 else []
+                        print(f"路径部分: {relative_path_parts}")
+                        
+                        # 创建文件夹结构
+                        parent_folder = current_folder
+                        print(f"初始父文件夹: {parent_folder.id if parent_folder else 'None'} ({parent_folder.name if parent_folder else '根目录'})")
+                        
+                        for folder_name in relative_path_parts:
+                            if not folder_name:
+                                continue
+                            
+                            print(f"处理文件夹: {folder_name} (父文件夹: {parent_folder.id if parent_folder else 'None'})")
+                            
+                            # 查找或创建文件夹
+                            existing_folder = Folder.objects.filter(
+                                directory=directory,
+                                parent=parent_folder,
+                                name=folder_name
+                            ).first()
+                            
+                            if existing_folder:
+                                print(f"文件夹已存在: {existing_folder.id} - {existing_folder.name} (父: {existing_folder.parent.id if existing_folder.parent else 'None'})")
+                                parent_folder = existing_folder
+                            else:
+                                new_folder = Folder.objects.create(
+                                    directory=directory,
+                                    parent=parent_folder,
+                                    name=folder_name
+                                )
+                                print(f"创建新文件夹: {new_folder.id} - {new_folder.name} (父: {new_folder.parent.id if new_folder.parent else 'None'})")
+                                parent_folder = new_folder
+                        
+                        print(f"最终父文件夹: {parent_folder.id if parent_folder else 'None'}")
+                        
+                        # 读取文件内容
+                        file_content = zf.read(info.filename)
+                        file_obj = io.BytesIO(file_content)
+                        file_obj.name = filename
+                        
+                        # 使用统一的导入函数
+                        import_result = _handle_single_file_import(
+                            file_obj,
+                            directory.id,
+                            parent_folder.id if parent_folder else None,
+                            request.user
+                        )
+                        
+                        if import_result['success']:
+                            results.append({
+                                'path': info.filename,
+                                'status': 'success',
+                                'document_id': import_result['document'].id,
+                                'folder_id': parent_folder.id if parent_folder else None,
+                                'directory_id': directory.id
+                            })
+                            print(f"✅ 文件处理成功: {info.filename}")
+                        else:
+                            results.append({
+                                'path': info.filename,
+                                'status': 'error',
+                                'error': str(import_result.get('error', '导入失败'))
+                            })
+                            print(f"❌ 文件处理失败: {info.filename}")
+                        
+                    except Exception as e:
+                        import traceback
+                        error_trace = traceback.format_exc()
+                        print(f"❌ 处理文件失败: {info.filename}")
+                        print(f"错误: {str(e)}")
+                        print(f"堆栈:\n{error_trace}")
+                        results.append({
+                            'path': info.filename,
+                            'status': 'error',
+                            'error': str(e)
+                        })
+            
+            success_count = sum(1 for r in results if r['status'] == 'success')
+            
+            return Response({
+                'success': True,
+                'results': results,
+                'success_count': success_count,
+                'total_count': len(results)
+            })
+            
+        except zipfile.BadZipFile:
+            return Response({'error': '无效的zip文件'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f'导入zip文件失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

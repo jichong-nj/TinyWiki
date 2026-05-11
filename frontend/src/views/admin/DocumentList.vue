@@ -54,6 +54,14 @@
         <div class="list-header-row">
           <span class="total-count">共 {{ documents.length }} 个文档</span>
           <div class="header-actions">
+            <el-button @click="showImportDialog = true">
+              <el-icon><Upload /></el-icon>
+              导入文件
+            </el-button>
+            <el-button @click="showZipImportDialog = true">
+              <el-icon><Files /></el-icon>
+              导入ZIP
+            </el-button>
             <el-dropdown trigger="click">
               <el-button type="text">
                 <el-icon><MoreFilled /></el-icon>
@@ -62,7 +70,6 @@
                 <el-dropdown-menu>
                   <el-dropdown-item @click="createDocument">创建文档</el-dropdown-item>
                   <el-dropdown-item @click="showSubfolderDialog = true">创建子文件夹</el-dropdown-item>
-                  <el-dropdown-item @click="showImportDialog = true">导入文件</el-dropdown-item>
                   <el-dropdown-item>批量删除</el-dropdown-item>
                   <el-dropdown-item>导出</el-dropdown-item>
                 </el-dropdown-menu>
@@ -230,6 +237,84 @@
         </el-button>
       </template>
     </el-dialog>
+    
+    <el-dialog title="导入ZIP文件" v-model="showZipImportDialog" @close="cancelZipImport" width="700px">
+      <div v-if="!zipFileList.length" class="zip-upload-area">
+        <el-upload
+          ref="zipUploadRef"
+          :auto-upload="false"
+          :on-change="handleZipFileChange"
+          :show-file-list="false"
+          accept=".zip"
+          class="zip-upload-demo"
+        >
+          <el-button type="primary" icon="Upload">选择ZIP文件</el-button>
+          <template #tip>
+            <div class="upload-tip">
+              选择一个.zip文件，支持包含文件夹结构
+              <div class="supported-types">
+                <strong>支持的文件类型：</strong>
+                .md, .txt, .docx, .doc, .pptx, .ppt, .pdf, .xlsx, .xls
+              </div>
+            </div>
+          </template>
+        </el-upload>
+        
+        <div v-if="zipFile" class="selected-zip-file">
+          <el-icon class="zip-icon"><Files /></el-icon>
+          <span class="zip-name">{{ zipFile.name }}</span>
+          <el-button type="text" size="small" @click="clearZipFile">移除</el-button>
+        </div>
+        
+        <div v-if="zipFile" class="upload-action">
+          <el-button type="primary" @click="uploadAndParseZip" :loading="parsingZip">
+            {{ parsingZip ? '解析中...' : '解析ZIP文件' }}
+          </el-button>
+        </div>
+      </div>
+      
+      <div v-else class="zip-file-list-area">
+        <div class="zip-list-header">
+          <div class="zip-list-title">
+            <el-icon><Folder /></el-icon>
+            <span>ZIP文件内容 (共 {{ zipFileList.length }} 个文件)</span>
+          </div>
+          <div class="zip-list-actions">
+            <el-button type="text" size="small" @click="selectAllZipFiles">
+              全选
+            </el-button>
+            <el-button type="text" size="small" @click="deselectAllZipFiles">
+              取消全选
+            </el-button>
+          </div>
+        </div>
+        
+        <div class="zip-file-list-scroll">
+          <div v-for="(file, index) in zipFileList" :key="index" class="zip-file-item">
+            <el-checkbox v-model="file.selected" />
+            <div class="zip-file-info">
+              <div class="zip-file-path">
+                <span class="path-text">{{ file.relative_path || '/' }}</span>
+                <span class="file-name-text">{{ file.filename }}</span>
+              </div>
+              <span class="zip-file-size">{{ formatFileSize(file.size) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="cancelZipImport">取消</el-button>
+        <el-button 
+          type="primary" 
+          @click="startZipImport" 
+          :loading="importingZip"
+          :disabled="!zipFileList.length || !selectedZipFilesCount"
+        >
+          {{ importingZip ? '导入中...' : `开始导入 (${selectedZipFilesCount}/${zipFileList.length})` }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -238,7 +323,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
 import { ElMessage } from 'element-plus'
-import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose, Upload, Folder, Check, Close } from '@element-plus/icons-vue'
 
 interface Document {
   id: number
@@ -280,6 +365,7 @@ const showSubfolderDialog = ref(false)
 const newSubfolderName = ref('')
 
 const showImportDialog = ref(false)
+const showZipImportDialog = ref(false)
 
 interface ImportFileItem {
   id: number
@@ -292,6 +378,25 @@ const importFiles = ref<ImportFileItem[]>([])
 let fileIdCounter = 0
 const uploadRef = ref()
 const uploading = ref(false)
+
+// ZIP 导入相关
+interface ZipFileItem {
+  filename: string
+  path: string
+  relative_path: string
+  size: number
+  selected: boolean
+}
+
+const zipFile = ref<File | null>(null)
+const zipUploadRef = ref()
+const zipFileList = ref<ZipFileItem[]>([])
+const parsingZip = ref(false)
+const importingZip = ref(false)
+
+const selectedZipFilesCount = computed(() => {
+  return zipFileList.value.filter(f => f.selected).length
+})
 
 const uploadUrl = computed(() => '/documents/files/upload-multiple/')
 const uploadHeaders = computed(() => {
@@ -356,15 +461,17 @@ function loadDocuments() {
 }
 
 function loadFolders() {
-  const params: Record<string, number> = {}
+  const params: Record<string, any> = {}
   if (selectedFolder.value) {
     params.parent = selectedFolder.value
   } else if (selectedDirectory.value) {
     params.directory = selectedDirectory.value
-    params.parent = null
+    params.parent = 'null' // 明确发送字符串"null"来表示顶层文件夹
   }
+  console.log('loadFolders参数:', params)
   axios.get('/documents/folders/', { params })
     .then(response => {
+      console.log('loadFolders返回:', response.data)
       folders.value = response.data
     })
     .catch(error => console.error('加载文件夹失败:', error))
@@ -676,6 +783,172 @@ function publishDocument(id: number) {
     .catch(error => console.error('发布文档失败:', error))
 }
 
+// ZIP 导入相关方法
+function handleZipFileChange(file: any) {
+  zipFile.value = file.raw
+}
+
+function clearZipFile() {
+  zipFile.value = null
+  zipFileList.value = []
+}
+
+function cancelZipImport() {
+  showZipImportDialog.value = false
+  zipFile.value = null
+  zipFileList.value = []
+}
+
+async function uploadAndParseZip() {
+  if (!zipFile.value) {
+    ElMessage.error('请先选择ZIP文件')
+    return
+  }
+  
+  parsingZip.value = true
+  
+  try {
+    const formData = new FormData()
+    formData.append('zip_file', zipFile.value)
+    
+    const response = await axios.post('/documents/zip/upload/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+      }
+    })
+    
+    // 按照相对路径排序，让嵌套结构更清晰
+    const files = response.data.files.sort((a: any, b: any) => {
+      const pathA = (a.relative_path || '') + '/' + a.filename
+      const pathB = (b.relative_path || '') + '/' + b.filename
+      return pathA.localeCompare(pathB)
+    })
+    
+    zipFileList.value = files
+    
+    let message = `成功解析 ${response.data.total_files} 个文件`
+    if (response.data.skipped_count > 0) {
+      message += `（已跳过 ${response.data.skipped_count} 个不支持的文件）`
+    }
+    
+    ElMessage.success(message)
+    
+  } catch (error: any) {
+    console.error('解析ZIP文件失败:', error)
+    ElMessage.error(error.response?.data?.error || '解析ZIP文件失败')
+  } finally {
+    parsingZip.value = false
+  }
+}
+
+function selectAllZipFiles() {
+  zipFileList.value.forEach(file => {
+    file.selected = true
+  })
+}
+
+function deselectAllZipFiles() {
+  zipFileList.value.forEach(file => {
+    file.selected = false
+  })
+}
+
+async function startZipImport() {
+  if (!zipFile.value) {
+    ElMessage.error('请先选择ZIP文件')
+    return
+  }
+  
+  const selectedFiles = zipFileList.value
+    .filter(f => f.selected)
+    .map(f => f.path)
+  
+  if (selectedFiles.length === 0) {
+    ElMessage.error('请至少选择一个文件')
+    return
+  }
+  
+  importingZip.value = true
+  
+  try {
+    const formData = new FormData()
+    formData.append('zip_file', zipFile.value)
+    formData.append('selected_files', JSON.stringify(selectedFiles))
+    
+    if (selectedFolder.value) {
+      formData.append('folder_id', selectedFolder.value.toString())
+    } else if (selectedDirectory.value) {
+      formData.append('directory_id', selectedDirectory.value.toString())
+    }
+    
+    console.log('正在导入ZIP文件，参数:', {
+      selectedFiles,
+      selectedDirectory: selectedDirectory.value,
+      selectedFolder: selectedFolder.value
+    })
+    
+    const response = await axios.post('/documents/zip/import/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+      }
+    })
+    
+    console.log('导入响应:', response.data)
+    
+    const { success_count, total_count, results } = response.data
+    
+    // 显示详细的导入结果
+    let detailMessage = ''
+    if (results && results.length > 0) {
+      const successFiles = results.filter((r: any) => r.status === 'success')
+      const errorFiles = results.filter((r: any) => r.status === 'error')
+      
+      if (successFiles.length > 0) {
+        detailMessage += `\n成功: ${successFiles.map((r: any) => r.path).join(', ')}`
+      }
+      if (errorFiles.length > 0) {
+        detailMessage += `\n失败: ${errorFiles.map((r: any) => `${r.path} (${r.error})`).join(', ')}`
+      }
+    }
+    
+    ElMessage.success(`成功导入 ${success_count}/${total_count} 个文件${detailMessage}`)
+    
+    // 延迟刷新，确保后端数据已保存
+    setTimeout(() => {
+      loadDocuments()
+      loadFolders()
+      
+      // 如果选中了文件夹，重新加载该文件夹
+      if (selectedFolder.value) {
+        loadDocuments()
+      }
+    }, 500)
+    
+    // 关闭对话框
+    showZipImportDialog.value = false
+    zipFile.value = null
+    zipFileList.value = []
+    
+  } catch (error: any) {
+    console.error('导入ZIP文件失败:', error)
+    ElMessage.error(error.response?.data?.error || '导入ZIP文件失败')
+  } finally {
+    importingZip.value = false
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
 onMounted(() => {
   loadDocuments()
   loadDirectories()
@@ -913,6 +1186,16 @@ onMounted(() => {
   font-size: 13px;
 }
 
+.supported-types {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f0f7ff;
+  border-radius: 6px;
+  color: #409eff;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .file-list-container {
   border: 2px dashed #d9d9d9;
   border-radius: 8px;
@@ -1059,5 +1342,130 @@ onMounted(() => {
 
 .menu-btn:hover {
   color: #666;
+}
+
+/* ZIP 导入相关样式 */
+.zip-upload-area {
+  padding: 20px;
+}
+
+.zip-upload-demo {
+  margin-bottom: 20px;
+}
+
+.selected-zip-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.zip-icon {
+  font-size: 24px;
+  color: #409eff;
+}
+
+.zip-name {
+  flex: 1;
+  font-size: 14px;
+  color: #333;
+}
+
+.upload-action {
+  display: flex;
+  justify-content: center;
+}
+
+.zip-file-list-area {
+  padding: 10px;
+}
+
+.zip-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.zip-list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.zip-list-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.zip-file-list-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+}
+
+.zip-file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.zip-file-item:last-child {
+  border-bottom: none;
+}
+
+.zip-file-item:hover {
+  background: #f5f7fa;
+}
+
+.zip-file-info {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.zip-file-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.path-text {
+  font-size: 12px;
+  color: #909399;
+  background: #f0f2f5;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.file-name-text {
+  font-size: 14px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zip-file-size {
+  font-size: 12px;
+  color: #909399;
+  flex-shrink: 0;
+  margin-left: 16px;
 }
 </style>

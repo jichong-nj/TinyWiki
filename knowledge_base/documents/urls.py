@@ -26,7 +26,9 @@ from .views import (
     HybridSearchView,
     ChatSessionListView,
     ChatSessionDetailView,
-    ChatSendMessageView
+    ChatSendMessageView,
+    ZipUploadView,
+    ZipImportView
 )
 
 urlpatterns = [
@@ -69,4 +71,8 @@ urlpatterns = [
     path('chat/sessions/', ChatSessionListView.as_view(), name='chat-session-list'),
     path('chat/sessions/<int:pk>/', ChatSessionDetailView.as_view(), name='chat-session-detail'),
     path('chat/sessions/<int:session_id>/send/', ChatSendMessageView.as_view(), name='chat-send-message'),
+    
+    # Zip 导入
+    path('zip/upload/', ZipUploadView.as_view(), name='zip-upload'),
+    path('zip/import/', ZipImportView.as_view(), name='zip-import'),
 ]
