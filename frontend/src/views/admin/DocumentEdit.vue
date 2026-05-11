@@ -47,7 +47,11 @@ const form = reactive({
 })
 
 function goBack() {
-  router.push('/')
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    router.push('/')
+  }
 }
 
 function loadDocument() {
@@ -74,13 +78,14 @@ function saveDraft() {
     axios.post('/documents/documents/', data)
       .then(() => {
         alert('保存成功')
-        router.push('/')
+        goBack()
       })
       .catch(error => console.error('保存失败:', error))
   } else {
     axios.put(`/documents/documents/${route.params.id}/`, data)
       .then(() => {
         alert('保存成功')
+        goBack()
       })
       .catch(error => console.error('保存失败:', error))
   }
@@ -101,7 +106,7 @@ function saveAndPublish() {
         axios.post(`/documents/documents/${docId}/publish/`)
           .then(() => {
             alert('发布成功')
-            router.push('/')
+            goBack()
           })
       })
       .catch(error => console.error('发布失败:', error))
@@ -111,7 +116,7 @@ function saveAndPublish() {
         axios.post(`/documents/documents/${route.params.id}/publish/`)
           .then(() => {
             alert('发布成功')
-            router.push('/')
+            goBack()
           })
       })
       .catch(error => console.error('发布失败:', error))

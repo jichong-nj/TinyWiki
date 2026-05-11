@@ -207,22 +207,81 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import axios from '../../axios'
 import { marked } from 'marked'
 import Prism from 'prismjs'
-import 'prismjs/components/prism-json'
-import 'prismjs/components/prism-python'
+import 'prismjs/themes/prism-okaidia.css'
 import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-typescript'
+import 'prismjs/components/prism-python'
+import 'prismjs/components/prism-json'
 import 'prismjs/components/prism-css'
+import 'prismjs/components/prism-scss'
+import 'prismjs/components/prism-java'
+import 'prismjs/components/prism-csharp'
+import 'prismjs/components/prism-c'
+import 'prismjs/components/prism-cpp'
 import 'prismjs/components/prism-bash'
 import 'prismjs/components/prism-sql'
 import 'prismjs/components/prism-markdown'
 import 'prismjs/components/prism-yaml'
+import 'prismjs/components/prism-markup'
 import 'prismjs/components/prism-go'
+import 'prismjs/components/prism-rust'
+import 'prismjs/components/prism-docker'
+import 'prismjs/components/prism-nginx'
+import 'prismjs/components/prism-php'
+import 'prismjs/components/prism-ruby'
+import 'prismjs/components/prism-swift'
+import 'prismjs/components/prism-kotlin'
+import 'prismjs/components/prism-perl'
+import 'prismjs/components/prism-lua'
+import 'prismjs/components/prism-makefile'
+import 'prismjs/components/prism-protobuf'
+import 'prismjs/components/prism-graphql'
 
 // 配置marked
 marked.setOptions({
   breaks: true,
   gfm: true
 })
+
+// 创建自定义渲染器
+const renderer = new marked.Renderer()
+const headings: TocItem[] = []
+
+// 重写标题渲染，添加id并收集标题
+renderer.heading = function({ text, depth, raw }: any) {
+  const id = `h-${raw.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]/g, '')}`
+  headings.push({ id, text, level: depth })
+  return `<h${depth} id="${id}">${text}</h${depth}>`
+}
+
+// 重写代码块渲染，支持语言标识和高亮
+renderer.code = function({ text, lang = '' }: any) {
+  const language = lang || 'text'
+  
+  // 尝试高亮
+  try {
+    const grammar = Prism.languages[language]
+    if (grammar) {
+      const highlightedCode = Prism.highlight(text, grammar, language)
+      return `<pre><code class="language-${language}">${highlightedCode}</code></pre>`
+    }
+  } catch (e) {
+    console.warn(`Prism.js 高亮失败，使用纯文本渲染`, e)
+  }
+  
+  // 如果没有语法支持，使用简单渲染
+  return `<pre><code class="language-${language}">${escapeHtml(text)}</code></pre>`
+}
+
+// HTML 转义辅助函数
+const escapeHtml = (str: string) => {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
 
 // 高亮代码块
 const highlightCode = () => {
@@ -434,17 +493,6 @@ const loadFileContent = async (fileId: number) => {
   } catch (error) {
     console.error('Failed to load file content:', error)
   }
-}
-
-// 创建自定义渲染器
-const renderer = new marked.Renderer()
-const headings: TocItem[] = []
-
-// 重写标题渲染，添加id并收集标题
-renderer.heading = function({ text, depth, raw }: any) {
-  const id = `h-${raw.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]/g, '')}`
-  headings.push({ id, text, level: depth })
-  return `<h${depth} id="${id}">${text}</h${depth}>`
 }
 
 const markdownToHtml = (content: string): string => {
@@ -962,7 +1010,12 @@ watch(selectedDirectory, () => {
 
 .document-content img {
   max-width: 100%;
+  width: auto;
+  height: auto;
+  display: block;
   border-radius: 4px;
+  margin: 16px 0;
+  object-fit: contain;
 }
 
 .empty-state {
@@ -1356,6 +1409,25 @@ pre[class*="language-"] {
 
 .document-content img {
   max-width: 100%;
+  width: auto;
+  height: auto;
+  display: block;
   border-radius: 4px;
+  margin: 16px 0;
+  object-fit: contain;
+}
+</style>
+
+<!-- 全局样式，用于 v-html 渲染的内容 -->
+<style>
+/* Markdown 渲染内容中的图片限制 */
+.document-content img {
+  max-width: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  display: block !important;
+  border-radius: 4px !important;
+  margin: 16px 0 !important;
+  object-fit: contain !important;
 }
 </style>

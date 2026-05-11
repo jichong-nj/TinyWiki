@@ -61,6 +61,27 @@ button:focus-visible {
   min-height: 100vh;
 }
 
+/* 全局图片样式限制 */
+img {
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
+
+/* Markdown 文档内容中的图片样式 */
+.document-content img,
+.v-md-preview img {
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+  margin: 16px 0;
+  object-fit: contain;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
