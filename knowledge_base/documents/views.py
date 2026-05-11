@@ -1,3 +1,4 @@
+import requests
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -1033,11 +1034,13 @@ class ChatSendMessageView(APIView):
         return Response({
             'user_message': {
                 'id': user_message.id,
+                'role': user_message.role,
                 'content': user_message.content,
                 'created_at': user_message.created_at.isoformat()
             },
             'assistant_message': {
                 'id': assistant_message.id,
+                'role': assistant_message.role,
                 'content': assistant_message.content,
                 'retrieved_documents': retrieved_docs,
                 'created_at': assistant_message.created_at.isoformat()
@@ -1081,43 +1084,54 @@ class ChatSendMessageView(APIView):
             
             messages.append({"role": "user", "content": user_content})
             
-            # 构建请求参数，支持 Nvidia 特有的参数
-            extra_params = {}
-            # 检查模型名称是否包含 qwen，添加 nvidia 特有参数
-            if "qwen" in ai_config.text_generation_model_name.lower():
-                extra_params["top_p"] = 0.95
+            # 用 requests 直接调用，完全控制请求格式（兼容 LM Studio）
             
-            response = client.chat.completions.create(
-                model=ai_config.text_generation_model_name,
-                messages=messages,
-                temperature=ai_config.text_generation_temperature,
-                max_tokens=2000,
-                timeout=120.0,  # 设置2分钟超时
-                **extra_params
+            payload = {
+                "model": ai_config.text_generation_model_name,
+                "messages": messages,
+                "temperature": ai_config.text_generation_temperature,
+                "max_tokens": 2000,
+                "top_p": 0.95,
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
+            
+            response = requests.post(
+                f"{ai_config.text_generation_base_url}/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {ai_config.text_generation_api_key}"},
+                timeout=120.0
             )
             
-            # 兼容不同的响应格式
-            message = response.choices[0].message
+            response.raise_for_status()  # 检查 HTTP 错误
+            data = response.json()
+            message = data["choices"][0]["message"]
             
-            # 方法1：优先使用 content 字段
-            if hasattr(message, 'content') and message.content is not None:
-                return message.content
+            # 智能提取响应内容
+            content_candidate = None
             
-            # 方法2：尝试使用 reasoning_content 字段
-            if hasattr(message, 'reasoning_content') and message.reasoning_content is not None:
-                return message.reasoning_content
+            # 1. 优先尝试 content
+            if message.get("content") and message["content"].strip():
+                content_candidate = message["content"].strip()
             
-            # 方法3：尝试从 model_extra 中获取
-            if hasattr(message, 'model_extra') and 'reasoning_content' in message.model_extra:
-                return message.model_extra['reasoning_content']
+            # 2. 然后尝试 reasoning_content
+            if not content_candidate and message.get("reasoning_content"):
+                rc = message["reasoning_content"].strip()
+                # 尝试从 reasoning_content 中提取最终回答
+                # 查找最后的中文或英文回答
+                lines = [line.strip() for line in rc.split('\n') if line.strip()]
+                if lines:
+                    # 优先查找看起来像回答的行（不是思考过程的行）
+                    for line in reversed(lines):
+                        if not line.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')) and not line.startswith(('*', '-')) and not line.startswith(('Here', '**')):
+                            content_candidate = line
+                            break
+                    # 如果没找到，就用最后一行
+                    if not content_candidate:
+                        content_candidate = lines[-1]
             
-            # 方法4：尝试使用 model_dump 获取完整数据
-            if hasattr(message, 'model_dump'):
-                data = message.model_dump()
-                if 'reasoning_content' in data and data['reasoning_content'] is not None:
-                    return data['reasoning_content']
+            if content_candidate:
+                return content_candidate
             
-            # 方法5：最后的 fallback，转为字符串
             return str(message)
             
         except Exception as e:

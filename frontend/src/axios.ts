@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const instance = axios.create({
   baseURL: 'http://localhost:8080/api',
-  timeout: 10000,
+  timeout: 120000, // 120 秒 = 2 分钟，给 LLM 足够的响应时间
   headers: {
     'Content-Type': 'application/json'
   }

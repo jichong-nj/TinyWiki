@@ -36,8 +36,20 @@ def search_fulltext(query: str, knowledge_base_id: int = None, top_k: int = 5):
     
     # 转换结果格式
     results = []
+    max_rank = 0.0
+    temp_results = []
     for doc in documents:
-        results.append((doc.id, float(doc.rank) if doc.rank else 0.0, doc.title, doc.content or ''))
+        rank = float(doc.rank) if doc.rank else 0.0
+        max_rank = max(max_rank, rank)
+        temp_results.append((doc.id, rank, doc.title, doc.content or ''))
+    
+    # 归一化到 0-1 范围（如果有结果）
+    if max_rank > 0:
+        for doc_id, rank, title, content in temp_results:
+            normalized_score = rank / max_rank
+            results.append((doc_id, normalized_score, title, content))
+    else:
+        results = temp_results
     
     return results
 
@@ -116,7 +128,7 @@ def search_vector(query: str, knowledge_base_id: int = None, top_k: int = 5):
 
 
 def search_hybrid(query: str, knowledge_base_id: int = None, top_k: int = 5, 
-                  fulltext_weight: float = 0.5, vector_weight: float = 0.5):
+                  fulltext_weight: float = 0.4, vector_weight: float = 0.6):
     """
     混合检索：结合全文检索和向量检索
     query: 查询字符串
@@ -153,11 +165,19 @@ def search_hybrid(query: str, knowledge_base_id: int = None, top_k: int = 5,
             }
         doc_scores[doc_id]['score'] += score * vector_weight
     
-    # 排序并返回
+    # 排序并归一化分数
     sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:top_k]
     
+    # 归一化分数到 0-1 范围
     results = []
-    for doc_id, info in sorted_docs:
-        results.append((doc_id, info['score'], info['title'], info['content']))
+    if sorted_docs:
+        max_score = max(info['score'] for _, info in sorted_docs)
+        if max_score > 0:
+            for doc_id, info in sorted_docs:
+                normalized_score = info['score'] / max_score
+                results.append((doc_id, normalized_score, info['title'], info['content']))
+        else:
+            for doc_id, info in sorted_docs:
+                results.append((doc_id, info['score'], info['title'], info['content']))
     
     return results

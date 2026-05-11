@@ -43,7 +43,7 @@
             
             <div v-for="msg in messages" :key="msg.id" class="message" :class="msg.role">
               <div class="message-avatar">
-                <span v-if="msg.role === 'user'">👤</span>
+                <span v-if="msg.role === 'user'">🧑</span>
                 <span v-else>🤖</span>
               </div>
               <div class="message-content">
