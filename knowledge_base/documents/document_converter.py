@@ -13,7 +13,7 @@ from .storage_service import StorageService
 class DocumentConverter:
     """文档转换器"""
     
-    SUPPORTED_TYPES = ['docx', 'doc', 'md', 'txt', 'pptx', 'ppt', 'pdf']
+    SUPPORTED_TYPES = ['docx', 'doc', 'md', 'txt', 'pptx', 'ppt', 'pdf', 'xlsx', 'xls']
     
     @classmethod
     def convert(cls, file_storage_id):
@@ -49,6 +49,8 @@ class DocumentConverter:
                 result = cls._convert_text(file_storage, conversion)
             elif file_type == 'pdf':
                 result = cls._convert_pdf(file_storage, conversion)
+            elif file_type in ['xlsx', 'xls']:
+                result = cls._convert_excel(file_storage, conversion)
             else:
                 result = {'success': False, 'error': f'不支持的文件类型: {file_type}'}
             
@@ -798,3 +800,171 @@ class DocumentConverter:
         except Exception as e:
             import traceback
             return {'success': False, 'error': f'PDF 转换失败: {str(e)}\n{traceback.format_exc()}'}
+    
+    @classmethod
+    def _convert_excel(cls, file_storage, conversion):
+        """
+        转换 Excel 文件，支持多 sheet 和图片/图表
+        
+        Args:
+            file_storage: FileStorage 对象
+            conversion: DocumentConversion 对象
+            
+        Returns:
+            dict: 转换结果
+        """
+        try:
+            import pandas as pd
+            from io import StringIO, BytesIO
+            from PIL import Image
+            import zipfile
+            import shutil
+            
+            excel_path = file_storage.full_path
+            
+            # 存储提取的图片
+            extracted_images = []
+            
+            # 尝试从 Excel 中提取图片
+            try:
+                temp_dir = tempfile.mkdtemp()
+                # 使用 openpyxl 读取图片
+                from openpyxl import load_workbook
+                
+                wb = load_workbook(excel_path, data_only=True)
+                
+                for sheet_idx, sheet_name in enumerate(wb.sheetnames):
+                    ws = wb[sheet_name]
+                    
+                    # 遍历 sheet 中的所有图片
+                    for img_idx, image in enumerate(ws._images):
+                        try:
+                            # 获取图片数据
+                            img_data = image._data()
+                            img_ext = image.format.lower() if image.format else 'png'
+                            
+                            # 保存临时文件
+                            img_filename = f"{sheet_name}_image_{img_idx + 1}.{img_ext}"
+                            img_temp_path = Path(temp_dir) / img_filename
+                            
+                            with open(img_temp_path, 'wb') as f:
+                                f.write(img_data)
+                            
+                            # 保存到存储系统
+                            img_file = StorageService.save_file_from_path(
+                                source_path=str(img_temp_path),
+                                storage_type='attachment',
+                                document=file_storage.document,
+                                original_name=img_filename
+                            )
+                            
+                            # 创建 FileAttachment
+                            if file_storage.document:
+                                FileAttachment.objects.create(
+                                    document=file_storage.document,
+                                    file_storage=img_file,
+                                    original_name=img_filename,
+                                    description=f"从 {sheet_name} 提取的图片"
+                                )
+                            
+                            extracted_images.append({
+                                'sheet': sheet_name,
+                                'index': img_idx,
+                                'file': img_file
+                            })
+                            
+                        except Exception as img_err:
+                            print(f"提取 Excel 图片失败: {img_err}")
+                            continue
+                
+                wb.close()
+                
+            except Exception as extract_err:
+                print(f"从 Excel 提取图片失败: {extract_err}")
+                import traceback
+                traceback.print_exc()
+            
+            # 读取所有 sheet 数据
+            xl = pd.ExcelFile(excel_path)
+            
+            markdown_content = []
+            sheet_image_index = {name: 0 for name in xl.sheet_names}
+            
+            # 处理每个 sheet
+            for sheet_name in xl.sheet_names:
+                # 添加一级标题作为 sheet 分隔
+                markdown_content.append(f"# {sheet_name}")
+                markdown_content.append("")
+                
+                # 先插入这个 sheet 中的所有图片
+                sheet_imgs = [img for img in extracted_images if img['sheet'] == sheet_name]
+                for img_info in sheet_imgs:
+                    markdown_content.append(f"![{img_info['file'].file_name}]({img_info['file'].file_url})")
+                    markdown_content.append("")
+                
+                # 读取 sheet 数据
+                df = pd.read_excel(excel_path, sheet_name=sheet_name)
+                
+                # 转换为 Markdown 表格
+                if not df.empty:
+                    # 表头
+                    headers = df.columns.tolist()
+                    markdown_content.append(f"| {' | '.join(str(h) for h in headers)} |")
+                    markdown_content.append(f"| {' | '.join('---' for _ in headers)} |")
+                    
+                    # 数据行
+                    for _, row in df.iterrows():
+                        row_values = []
+                        for val in row:
+                            # 处理特殊值
+                            if pd.isna(val):
+                                row_values.append('')
+                            else:
+                                # 转义 | 避免破坏表格
+                                row_str = str(val).replace('|', '\\|')
+                                row_values.append(row_str)
+                        markdown_content.append(f"| {' | '.join(row_values)} |")
+                
+                markdown_content.append("")  # 空行分隔
+            
+            # 清理临时目录
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+            
+            # 合并所有内容
+            markdown_text = '\n'.join(markdown_content)
+            
+            # 保存转换后的 Markdown
+            converted_name = Path(file_storage.file_name).stem + '.md'
+            converted_file = StorageService.save_file(
+                file_obj=None,
+                storage_type='converted',
+                document=file_storage.document,
+                original_name=converted_name,
+                content=markdown_text
+            )
+            
+            # 更新文档内容
+            if file_storage.document:
+                file_storage.document.content = markdown_text
+                file_storage.document.save()
+            
+            conversion_info = {
+                'method': 'excel',
+                'sheets_count': len(xl.sheet_names),
+                'sheet_names': xl.sheet_names,
+                'images_count': len(extracted_images)
+            }
+            
+            return {
+                'success': True,
+                'converted_file': converted_file,
+                'info': conversion_info,
+                'markdown': markdown_text
+            }
+            
+        except Exception as e:
+            import traceback
+            return {'success': False, 'error': f'Excel 转换失败: {str(e)}\n{traceback.format_exc()}'}

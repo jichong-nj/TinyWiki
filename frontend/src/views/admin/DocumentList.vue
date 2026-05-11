@@ -175,7 +175,7 @@
           :headers="uploadHeaders"
           :data="uploadData"
           :multiple="true"
-          accept=".md,.txt,.docx,.doc,.pptx,.ppt,.pdf"
+          accept=".md,.txt,.docx,.doc,.pptx,.ppt,.pdf,.xlsx,.xls"
           :auto-upload="false"
           :on-change="handleFileChange"
           :on-success="handleUploadSuccess"
@@ -184,7 +184,7 @@
         >
           <el-button type="primary" icon="Upload">选择文件</el-button>
           <template #tip>
-            <div class="el-upload__tip">支持 .md, .txt, .docx, .doc, .pptx, .ppt, .pdf 格式文件，可多选</div>
+            <div class="el-upload__tip">支持 .md, .txt, .docx, .doc, .pptx, .ppt, .pdf, .xlsx, .xls 格式文件，可多选</div>
           </template>
         </el-upload>
         
