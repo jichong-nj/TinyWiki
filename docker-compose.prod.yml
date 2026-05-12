@@ -1,12 +1,13 @@
 services:
   db:
-    image: postgres:15-alpine
+    build: ./postgres
     environment:
       POSTGRES_DB: tinywiki
       POSTGRES_USER: tinywiki_user
       POSTGRES_PASSWORD: tinywiki_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tinywiki_user -d tinywiki"]
