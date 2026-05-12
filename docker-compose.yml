@@ -1,6 +1,6 @@
 services:
   db:
-    # 使用自定义 PostgreSQL 镜像（包含 pgvector + pg_jieba 中文分词）
+    # 使用自定义镜像（pgvector + zhparser 中文分词）
     build: ./postgres
     environment:
       POSTGRES_DB: tinywiki

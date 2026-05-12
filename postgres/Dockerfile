@@ -1,10 +1,9 @@
-# 基于 pgvector 官方镜像，添加中文分词支持
+# 基于 pgvector 官方镜像，添加 zhparser 中文分词
 FROM pgvector/pgvector:pg16
 
 # 配置国内 apt 镜像（阿里云）
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true
-RUN sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true
-RUN sed -i 's/apt.postgresql.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/pgdg.list 2>/dev/null || true
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true; \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true
 
 # 安装编译依赖
 RUN apt-get update && apt-get install -y \
@@ -12,18 +11,21 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     postgresql-server-dev-16 \
     wget \
-    cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 pg_jieba 中文分词插件（使用 gitee 镜像加速）
-RUN git clone --depth=1 https://gitee.com/mirrors/pg_jieba.git /tmp/pg_jieba \
-    && cd /tmp/pg_jieba \
-    && git submodule update --init --recursive \
-    && mkdir -p build \
-    && cd build \
-    && cmake .. \
+# 手动下载安装 SCWS（zhparser 依赖）- 使用 GitHub 国内加速
+RUN wget -qO- https://ghproxy.com/https://github.com/hightman/scws/archive/refs/tags/1.2.3.tar.gz | tar xz -C /tmp \
+    && cd /tmp/scws-1.2.3 \
+    && ./configure \
     && make \
     && make install \
-    && rm -rf /tmp/pg_jieba
+    && rm -rf /tmp/scws-1.2.3
+
+# 安装 zhparser 中文分词插件
+RUN git clone --depth=1 https://gitee.com/mirrors/zhparser.git /tmp/zhparser \
+    && cd /tmp/zhparser \
+    && make \
+    && make install \
+    && rm -rf /tmp/zhparser
 
 # 配置完成！
