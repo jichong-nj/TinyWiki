@@ -6,15 +6,18 @@ RUN apt-get update && apt-get install -y \
     git \
     build-essential \
     postgresql-server-dev-16 \
-    libscws-dev \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 zhparser 中文分词插件
-RUN git clone --depth=1 https://github.com/amutu/zhparser.git /tmp/zhparser \
-    && cd /tmp/zhparser \
+# 安装 pg_jieba 中文分词插件
+RUN git clone --depth=1 https://github.com/jaiminpan/pg_jieba.git /tmp/pg_jieba \
+    && cd /tmp/pg_jieba \
+    && git submodule update --init --recursive \
+    && mkdir -p build \
+    && cd build \
+    && cmake .. \
     && make \
     && make install \
-    && rm -rf /tmp/zhparser
+    && rm -rf /tmp/pg_jieba
 
 # 配置完成！
