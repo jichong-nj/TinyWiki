@@ -1,4 +1,4 @@
--- 初始化所有扩展
+-- 初始化所有扩展脚本，只会在 PostgreSQL 数据目录为空、容器首次初始化数据库时运行一次。
 
 -- 1. 创建 pgvector 扩展
 CREATE EXTENSION IF NOT EXISTS vector;
