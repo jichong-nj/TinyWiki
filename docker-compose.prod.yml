@@ -1,6 +1,7 @@
 services:
   db:
     build: ./postgres
+    image: tinywiki-db:latest
     environment:
       POSTGRES_DB: tinywiki
       POSTGRES_USER: tinywiki_user

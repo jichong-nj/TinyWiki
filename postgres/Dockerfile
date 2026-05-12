@@ -28,4 +28,14 @@ RUN git clone --depth=1 https://gitcode.com/gh_mirrors/zh/zhparser.git /tmp/zhpa
     && make install \
     && rm -rf /tmp/zhparser
 
+# 清理构建依赖，减小镜像大小
+RUN apt-get remove -y \
+    git \
+    build-essential \
+    postgresql-server-dev-16 \
+    wget \
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # 配置完成！
