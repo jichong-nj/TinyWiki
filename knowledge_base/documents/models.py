@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.contrib.postgres.search import SearchVectorField
 from django.db.models.signals import post_save, post_delete
+from pgvector.django import VectorField
 
 
 class KnowledgeBase(models.Model):
@@ -130,7 +131,10 @@ class DocumentChunk(models.Model):
         related_name='chunks'
     )
     content = models.TextField()
+    # 旧的 JSON 字段（保留用于兼容）
     embedding = models.TextField(null=True, blank=True)
+    # 新的 pgvector 字段（默认 1024 维）
+    embedding_vector = VectorField(dimensions=1024, null=True, blank=True)
     chunk_index = models.IntegerField()
     chunk_size = models.IntegerField()
     overlap_size = models.IntegerField()

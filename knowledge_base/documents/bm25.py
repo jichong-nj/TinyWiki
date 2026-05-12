@@ -3,6 +3,7 @@ from .models import Document
 from .models import DocumentChunk
 from .embedding import get_embedding, cosine_similarity
 from api.models import AIConfig
+from pgvector.django import L2Distance, CosineDistance
 import json
 
 
@@ -56,7 +57,7 @@ def search_fulltext(query: str, knowledge_base_id: int = None, top_k: int = 5):
 
 def search_vector(query: str, knowledge_base_id: int = None, top_k: int = 5):
     """
-    使用向量相似度搜索文档chunk
+    使用 pgvector 向量相似度搜索文档chunk
     query: 查询字符串
     knowledge_base_id: 知识库ID（可选）
     top_k: 返回前k个结果
@@ -84,47 +85,38 @@ def search_vector(query: str, knowledge_base_id: int = None, top_k: int = 5):
     # 过滤chunk
     chunks = DocumentChunk.objects.filter(
         document__publish_status='published',
-        embedding__isnull=False
+        embedding_vector__isnull=False
     ).select_related('document')
     
     # 如果指定了知识库，添加过滤条件
     if knowledge_base_id:
         chunks = chunks.filter(document__directory__knowledge_base_id=knowledge_base_id)
     
-    # 计算相似度
+    # 使用 pgvector 的 CosineDistance 进行搜索
+    chunks = chunks.annotate(
+        distance=CosineDistance('embedding_vector', query_embedding)
+    ).order_by('distance')[:top_k * 2]
+    
+    # 转换结果（distance 越小越相似，转换成 0-1 的相似度分数）
     results = []
-    for chunk in chunks:
-        try:
-            chunk_embedding = json.loads(chunk.embedding)
-            similarity = cosine_similarity(query_embedding, chunk_embedding)
-            results.append({
-                'document_id': chunk.document.id,
-                'title': chunk.document.title,
-                'content': chunk.content,
-                'similarity': similarity
-            })
-        except (json.JSONDecodeError, TypeError):
-            continue
-    
-    # 排序并去重（按文档合并）
-    results.sort(key=lambda x: x['similarity'], reverse=True)
-    
-    # 去重，每个文档只保留最相关的chunk
     seen_docs = set()
-    unique_results = []
-    for result in results:
-        if result['document_id'] not in seen_docs:
-            seen_docs.add(result['document_id'])
-            unique_results.append((
-                result['document_id'],
-                result['similarity'],
-                result['title'],
-                result['content']
+    for chunk in chunks:
+        if chunk.document_id not in seen_docs:
+            seen_docs.add(chunk.document_id)
+            # 将距离转换为相似度：1 - distance（归一化）
+            similarity = 1.0 - float(chunk.distance) if chunk.distance is not None else 0.0
+            # 确保相似度在 0-1 之间
+            similarity = max(0.0, min(1.0, similarity))
+            results.append((
+                chunk.document.id,
+                similarity,
+                chunk.document.title,
+                chunk.content
             ))
-            if len(unique_results) >= top_k:
+            if len(results) >= top_k:
                 break
     
-    return unique_results
+    return results
 
 
 def search_hybrid(query: str, knowledge_base_id: int = None, top_k: int = 5, 

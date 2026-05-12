@@ -1,12 +1,14 @@
 services:
   db:
-    image: postgres:15-alpine
+    # 使用自定义 PostgreSQL 镜像（包含 pgvector + zhparser 中文分词）
+    build: ./postgres
     environment:
       POSTGRES_DB: tinywiki
       POSTGRES_USER: tinywiki_user
       POSTGRES_PASSWORD: tinywiki_password
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d
     restart: always
     ports:
       - "5432:5432"

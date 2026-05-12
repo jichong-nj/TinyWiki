@@ -88,6 +88,7 @@ def create_chunks_with_embedding(document):
                 document=document,
                 content=chunk_content,
                 embedding=embedding_json,
+                embedding_vector=embedding,
                 chunk_index=i,
                 chunk_size=CHUNK_SIZE,
                 overlap_size=OVERLAP_SIZE
