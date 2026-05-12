@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# 手动下载安装 SCWS（zhparser 依赖）- 使用 GitHub 国内加速
-RUN wget -qO- https://ghproxy.com/https://github.com/hightman/scws/archive/refs/tags/1.2.3.tar.gz | tar xz -C /tmp \
+# 手动下载安装 SCWS（zhparser 依赖）- 使用官方源
+RUN wget -qO- http://www.xunsearch.com/scws/down/scws-1.2.3.tar.bz2 | tar xj -C /tmp \
     && cd /tmp/scws-1.2.3 \
     && ./configure \
     && make \
@@ -22,7 +22,7 @@ RUN wget -qO- https://ghproxy.com/https://github.com/hightman/scws/archive/refs/
     && rm -rf /tmp/scws-1.2.3
 
 # 安装 zhparser 中文分词插件
-RUN git clone --depth=1 https://gitee.com/mirrors/zhparser.git /tmp/zhparser \
+RUN git clone --depth=1 https://gitcode.com/gh_mirrors/zh/zhparser.git /tmp/zhparser \
     && cd /tmp/zhparser \
     && make \
     && make install \
