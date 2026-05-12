@@ -630,6 +630,30 @@ import zipfile
 import io
 
 
+def normalize_zip_filename(filename):
+    """保证ZIP条目路径使用UTF-8解码，兼容GBK/CP437编码的中文文件名。"""
+    if isinstance(filename, bytes):
+        for enc in ('utf-8', 'gbk', 'cp936', 'cp437'):
+            try:
+                return filename.decode(enc)
+            except UnicodeDecodeError:
+                continue
+        return filename.decode('utf-8', errors='ignore')
+
+    if isinstance(filename, str):
+        try:
+            raw = filename.encode('cp437')
+            return raw.decode('utf-8')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            try:
+                raw = filename.encode('cp437')
+                return raw.decode('gbk')
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                return filename
+
+    return filename
+
+
 def _handle_single_file_import(file_obj, directory_id, folder_id, user):
     """处理单个文件导入的通用逻辑，供单文件上传和ZIP导入共同使用"""
     print(f'_handle_single_file_import 开始: directory_id={directory_id}, folder_id={folder_id}')
@@ -1370,6 +1394,7 @@ class ZipUploadView(APIView):
                         continue
                     # 清理路径，去除末尾的/
                     cleaned_path = info.filename.rstrip('/')
+                    cleaned_path = normalize_zip_filename(cleaned_path)
                     if cleaned_path:
                         all_paths.append(cleaned_path)
                 
@@ -1400,6 +1425,7 @@ class ZipUploadView(APIView):
                     
                     # 获取文件路径信息
                     original_path = info.filename.rstrip('/')
+                    original_path = normalize_zip_filename(original_path)
                     path_parts = original_path.split('/')
                     filename = path_parts[-1]
                     
@@ -1529,16 +1555,18 @@ class ZipImportView(APIView):
             zip_buffer = io.BytesIO(zip_content)
             
             results = []
-            # 清理selected_paths中的路径
+            # 清理selected_paths中的路径，统一为UTF-8编码路径
             cleaned_selected_paths = set()
             for path in selected_files:
-                cleaned_selected_paths.add(path.rstrip('/'))
+                normalized_path = normalize_zip_filename(path).rstrip('/')
+                cleaned_selected_paths.add(normalized_path)
             print(f'清理后的选中路径: {cleaned_selected_paths}')
             
             with zipfile.ZipFile(zip_buffer, 'r') as zf:
                 for info in zf.infolist():
                     # 清理当前文件的路径
                     cleaned_current_path = info.filename.rstrip('/')
+                    cleaned_current_path = normalize_zip_filename(cleaned_current_path)
                     
                     if info.is_dir() or cleaned_current_path not in cleaned_selected_paths:
                         continue
@@ -1591,7 +1619,7 @@ class ZipImportView(APIView):
                         print(f"最终父文件夹: {parent_folder.id if parent_folder else 'None'}")
                         
                         # 读取文件内容
-                        file_content = zf.read(info.filename)
+                        file_content = zf.read(info)
                         file_obj = io.BytesIO(file_content)
                         file_obj.name = filename
                         
