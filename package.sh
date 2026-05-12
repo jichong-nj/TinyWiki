@@ -28,10 +28,10 @@ docker pull nginx:alpine
 
 # 构建所有镜像
 echo "构建数据库镜像..."
-docker-compose build db
+docker compose build db
 
 echo "构建 Web 镜像..."
-docker-compose build web
+docker compose build web
 
 # 保存所有镜像
 echo "保存 Docker 镜像..."
@@ -89,13 +89,13 @@ docker load -i tinywiki-nginx.tar
 ### 3. 启动服务
 ```bash
 # 首次启动（会初始化数据库）
-docker-compose up -d
+docker compose up -d
 
 # 查看服务状态
-docker-compose ps
+docker compose ps
 
 # 查看日志
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### 4. 访问
@@ -201,5 +201,5 @@ echo "   cd $PACKAGE_NAME"
 echo "   docker load -i tinywiki-postgres.tar"
 echo "   docker load -i tinywiki-web.tar"
 echo "   docker load -i tinywiki-nginx.tar"
-echo "   docker-compose -f docker-compose.prod.yml up -d"
+echo "   docker compose -f docker-compose.prod.yml up -d"
 echo ""

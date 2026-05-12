@@ -13,7 +13,7 @@
 1. **停止旧服务（如果在运行）**
    ```bash
    cd /path/to/your/project
-   docker-compose down
+   docker compose down
    ```
 
 2. **删除旧数据目录（重要！因为数据库格式变了）**
@@ -23,13 +23,13 @@
 
 3. **重新构建并启动**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 4. **应用数据库迁移**
    ```bash
    # 进入 web 容器
-   docker-compose exec web bash
+   docker compose exec web bash
    
    # 运行迁移
    python manage.py makemigrations
@@ -102,14 +102,14 @@ docker load -i tinywiki-web.tar
 ### 4. 部署
 ```bash
 cd /path/to/project
-docker-compose down
+docker compose down
 # 备份数据（如果需要）
 sudo mv ./postgres_data ./postgres_data_backup
 # 重新启动
-docker-compose up -d
+docker compose up -d
 # 运行迁移
-docker-compose exec web python manage.py makemigrations
-docker-compose exec web python manage.py migrate
+docker compose exec web python manage.py makemigrations
+docker compose exec web python manage.py migrate
 ```
 
 ---
@@ -139,7 +139,7 @@ python manage.py migrate
 
 ### 检查 pgvector 是否安装成功
 ```bash
-docker-compose exec db psql -U tinywiki_user -d tinywiki -c "\dx"
+docker compose exec db psql -U tinywiki_user -d tinywiki -c "\dx"
 ```
 
 应该能看到 `vector` 扩展已安装！
@@ -171,7 +171,7 @@ A: pgvector 比 Python 层计算快很多！特别是数据量大的时候。
 
 ```bash
 # 1. 停止服务
-docker-compose down
+docker compose down
 
 # 2. 恢复旧数据
 sudo mv ./postgres_data_backup ./postgres_data

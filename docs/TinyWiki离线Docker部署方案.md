@@ -74,7 +74,7 @@ EXPOSE 8080
 CMD ["gunicorn", "knowledge_base.wsgi:application", "--bind", "0.0.0.0:8080", "--workers", "4", "--timeout", "120"]
 ```
 
-**2. docker-compose.yml（在项目根目录）：**
+**2. docker compose.yml（在项目根目录）：**
 
 ```yaml
 version: '3.8'
@@ -211,7 +211,7 @@ docker pull nginx:alpine
 docker pull python:3.11-slim
 
 # 构建我们自己的 web 镜像
-docker-compose build web
+docker compose build web
 ```
 
 ### 步骤5：保存 Docker 镜像到文件
@@ -241,7 +241,7 @@ cp -r /home/jichong/Projects/TinyWiki/knowledge_base .
 cp -r /home/jichong/Projects/TinyWiki/frontend/dist ./frontend-dist
 cp /home/jichong/Projects/TinyWiki/requirements.txt .
 cp /home/jichong/Projects/TinyWiki/Dockerfile .
-cp /home/jichong/Projects/TinyWiki/docker-compose.yml .
+cp /home/jichong/Projects/TinyWiki/docker compose.yml .
 cp /home/jichong/Projects/TinyWiki/nginx.conf .
 cp /home/jichong/Projects/TinyWiki/.dockerignore .
 
@@ -265,12 +265,12 @@ cat > DEPLOY_README.md << 'EOF'
 
 2. 启动服务
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 3. 创建超级管理员（可选）
    ```bash
-   docker-compose exec web python manage.py createsuperuser
+   docker compose exec web python manage.py createsuperuser
    ```
 
 4. 访问应用
@@ -282,29 +282,29 @@ cat > DEPLOY_README.md << 'EOF'
 
 查看服务状态：
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 查看日志：
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 停止服务：
 ```bash
-docker-compose down
+docker compose down
 ```
 
 重启服务：
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 ## 数据备份
 
 数据库备份：
 ```bash
-docker-compose exec db pg_dump -U tinywiki_user tinywiki > backup.sql
+docker compose exec db pg_dump -U tinywiki_user tinywiki > backup.sql
 ```
 
 文件备份：
@@ -332,7 +332,7 @@ tar czf tinywiki-deploy-package.tar.gz tinywiki-deploy/
 docker --version
 
 # 检查 Docker Compose 版本
-docker-compose --version
+docker compose --version
 ```
 
 **如果没有安装 Docker 和 Docker Compose，请先在有网络的环境下载安装包，然后在离线服务器安装。**
@@ -372,7 +372,7 @@ docker images
 1. **修改后端地址配置**（如果服务器有固定IP或域名）：
    - 修改 `frontend-dist/` 中的前端配置（如果前端需要调用特定IP）
 
-2. **修改 `docker-compose.yml` 中的环境变量**（可选）：
+2. **修改 `docker compose.yml` 中的环境变量**（可选）：
    - `SECRET_KEY`：生产环境请修改为更安全的密钥
    - `ALLOWED_HOSTS`：如果需要限制访问的域名
 
@@ -380,19 +380,19 @@ docker images
 
 ```bash
 # 启动所有服务
-docker-compose up -d
+docker compose up -d
 
 # 查看服务状态
-docker-compose ps
+docker compose ps
 
 # 查看日志，确认服务正常启动
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### 步骤7：创建超级管理员（可选但推荐）
 
 ```bash
-docker-compose exec web python manage.py createsuperuser
+docker compose exec web python manage.py createsuperuser
 ```
 
 按提示输入用户名、邮箱和密码。
@@ -413,24 +413,24 @@ docker-compose exec web python manage.py createsuperuser
 
 ```bash
 # 查看所有服务状态
-docker-compose ps
+docker compose ps
 
 # 查看服务日志
-docker-compose logs -f
-docker-compose logs -f web
-docker-compose logs -f db
+docker compose logs -f
+docker compose logs -f web
+docker compose logs -f db
 
 # 停止服务
-docker-compose down
+docker compose down
 
 # 启动服务
-docker-compose up -d
+docker compose up -d
 
 # 重启服务
-docker-compose restart
+docker compose restart
 
 # 进入 web 容器
-docker-compose exec web bash
+docker compose exec web bash
 ```
 
 ### 数据备份
@@ -439,10 +439,10 @@ docker-compose exec web bash
 
 ```bash
 # 备份数据库
-docker-compose exec db pg_dump -U tinywiki_user tinywiki > tinywiki-db-backup-$(date +%Y%m%d).sql
+docker compose exec db pg_dump -U tinywiki_user tinywiki > tinywiki-db-backup-$(date +%Y%m%d).sql
 
 # 恢复数据库
-cat tinywiki-db-backup-20230101.sql | docker-compose exec -T db psql -U tinywiki_user tinywiki
+cat tinywiki-db-backup-20230101.sql | docker compose exec -T db psql -U tinywiki_user tinywiki
 ```
 
 #### 2. 文件备份
@@ -467,14 +467,14 @@ docker run --rm -v tinywiki_storage_volume:/data -v $(pwd):/backup alpine tar xz
 
 ```bash
 # 在有网络的环境
-docker-compose build web
+docker compose build web
 docker save -o tinywiki-web-new.tar tinywiki_web:latest
 
 # 传输到离线服务器，然后
-docker-compose stop web
-docker-compose rm -f web
+docker compose stop web
+docker compose rm -f web
 docker load -i tinywiki-web-new.tar
-docker-compose up -d web
+docker compose up -d web
 ```
 
 ---
@@ -483,7 +483,7 @@ docker-compose up -d web
 
 1. **防火墙配置**：确保服务器的 80 和 8080 端口对外开放
 2. **存储空间**：确保有足够的磁盘空间存储上传的文件和数据库
-3. **SECRET_KEY**：生产环境务必修改 `docker-compose.yml` 中的 SECRET_KEY
+3. **SECRET_KEY**：生产环境务必修改 `docker compose.yml` 中的 SECRET_KEY
 4. **数据备份**：定期备份数据库和存储文件
 5. **日志监控**：定期查看日志，确保系统正常运行
 6. **权限设置**：确保 Docker 有足够的权限访问挂载的卷

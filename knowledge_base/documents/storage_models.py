@@ -47,7 +47,7 @@ class FileStorage(models.Model):
     def file_url(self):
         """获取文件访问URL"""
         from django.conf import settings
-        return f"{settings.STORAGE_FILE_URL}{self.md5_hash}"
+        return f"/storage/{self.relative_path}"
     
     @classmethod
     def get_md5(cls, file_obj):
