@@ -18,10 +18,13 @@ import vuepressTheme from '@kangc/v-md-editor/lib/theme/vuepress.js'
 import '@kangc/v-md-editor/lib/theme/style/vuepress.css'
 import Prism from 'prismjs'
 
-// 使用主题和 Prism
-VMdEditor.use(vuepressTheme, {
-  Prism
-})
+// 确保只初始化一次
+if (!VMdEditor.__initialized) {
+  VMdEditor.use(vuepressTheme, {
+    Prism
+  })
+  VMdEditor.__initialized = true
+}
 
 const props = defineProps({
   modelValue: {

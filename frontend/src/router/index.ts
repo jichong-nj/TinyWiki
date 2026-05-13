@@ -26,11 +26,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/admin/DocumentEdit.vue')
       },
       {
-        path: 'document/new',
-        name: 'DocumentNew',
-        component: () => import('../views/admin/DocumentEdit.vue')
-      },
-      {
         path: 'knowledge-base',
         name: 'KnowledgeBase',
         component: () => import('../views/admin/KnowledgeBase.vue')

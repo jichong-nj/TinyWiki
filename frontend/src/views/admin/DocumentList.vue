@@ -831,7 +831,14 @@ function deleteFolder(id: number) {
 }
 
 function createDocument() {
-  router.push('/document/new')
+  const query: any = {}
+  if (selectedDirectory.value) {
+    query.directory = selectedDirectory.value
+  }
+  if (selectedFolder.value) {
+    query.folder = selectedFolder.value
+  }
+  router.push({ path: '/document/new', query })
 }
 
 function editDocument(id: number) {

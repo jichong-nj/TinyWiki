@@ -38,7 +38,12 @@ interface Document {
 const route = useRoute()
 const router = useRouter()
 
-const isNew = computed(() => route.params.id === 'new')
+const isNew = computed(() => {
+  const id = route.params.id
+  console.log('DocumentEdit route.params:', route.params)
+  console.log('DocumentEdit id:', id, 'type:', typeof id)
+  return id === 'new' || id === undefined || id === 'undefined'
+})
 const documentData = ref<Document | null>(null)
 
 const form = reactive({
@@ -57,6 +62,7 @@ function goBack() {
 }
 
 function loadDocument() {
+  console.log('loadDocument called, isNew:', isNew.value, 'route.params.id:', route.params.id)
   if (!isNew.value) {
     console.log('开始加载文档，ID:', route.params.id)
     axios.get(`/documents/documents/${route.params.id}/`)
@@ -160,6 +166,16 @@ function saveAndPublish() {
 }
 
 onMounted(() => {
+  // 从查询参数中读取directory和folder
+  const query = route.query
+  if (query.directory) {
+    form.directory = Number(query.directory)
+  }
+  if (query.folder) {
+    form.folder = Number(query.folder)
+  }
+  console.log('从查询参数设置的directory和folder:', form.directory, form.folder)
+  
   loadDocument()
 })
 </script>
