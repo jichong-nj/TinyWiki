@@ -318,7 +318,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import axios from '../../axios'
 import { ElMessage } from 'element-plus'
 import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose, Upload, Folder } from '@element-plus/icons-vue'
@@ -355,6 +355,7 @@ interface KnowledgeBase {
 }
 
 const router = useRouter()
+const route = useRoute()
 
 const knowledgeBases = ref<KnowledgeBase[]>([])
 const currentKnowledgeBase = ref<number | null>(null)
@@ -364,6 +365,16 @@ const folders = ref<Folder[]>([])
 const selectedDirectory = ref<number | null>(null)
 const selectedFolder = ref<number | null>(null)
 const breadcrumbFolders = ref<Folder[]>([])
+
+// Initialize state from route query parameters
+function initStateFromQuery() {
+  if (route.query.directory) {
+    selectedDirectory.value = Number(route.query.directory)
+  }
+  if (route.query.folder) {
+    selectedFolder.value = Number(route.query.folder)
+  }
+}
 const showAddDialog = ref(false)
 const newDirName = ref('')
 const editingDir = ref<Directory | null>(null)
@@ -429,10 +440,13 @@ function loadKnowledgeBases() {
     .then(response => {
       console.log('Knowledge bases loaded:', response.data)
       knowledgeBases.value = response.data
-      if (knowledgeBases.value.length > 0 && currentKnowledgeBase.value === null) {
-        console.log('Setting default knowledge base:', knowledgeBases.value[0].id)
-        currentKnowledgeBase.value = knowledgeBases.value[0].id
-        onKnowledgeBaseChange()
+      if (knowledgeBases.value.length > 0) {
+        if (currentKnowledgeBase.value === null) {
+          console.log('Setting default knowledge base:', knowledgeBases.value[0].id)
+          currentKnowledgeBase.value = knowledgeBases.value[0].id
+        }
+        // Load directories and restore saved state
+        loadDirectories()
       }
     })
     .catch(error => console.error('加载知识库失败:', error))
@@ -556,11 +570,15 @@ function loadDirectories() {
     .then(response => {
       console.log('loadDirectories response:', response.data)
       directories.value = response.data
-      if (directories.value.length > 0 && !selectedDirectory.value) {
-        selectedDirectory.value = directories.value[0].id
-        loadDocuments()
-        loadFolders()
-      } else {
+      if (directories.value.length > 0) {
+        // Check if saved directory exists in loaded directories
+        const savedDirExists = directories.value.some(d => d.id === selectedDirectory.value)
+        if (!savedDirExists) {
+          // Reset to first directory if saved one doesn't exist
+          selectedDirectory.value = directories.value[0].id
+          selectedFolder.value = null
+          breadcrumbFolders.value = []
+        }
         loadDocuments()
         loadFolders()
       }
@@ -1051,6 +1069,8 @@ function handleAdminLayoutKnowledgeBaseChange(event: CustomEvent) {
 }
 
 onMounted(() => {
+  // Initialize state from route query parameters
+  initStateFromQuery()
   loadKnowledgeBases()
   // 监听来自AdminLayout的知识库切换事件
   window.addEventListener('knowledgeBaseChanged', handleAdminLayoutKnowledgeBaseChange as EventListener)

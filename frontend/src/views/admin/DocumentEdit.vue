@@ -54,7 +54,22 @@ const form = reactive({
 })
 
 function goBack() {
-  router.push('/')
+  const query: any = {}
+  
+  // 优先从表单获取目录和文件夹
+  if (form.directory) {
+    query.directory = form.directory
+  } else if (route.query.directory) {
+    query.directory = route.query.directory
+  }
+  
+  if (form.folder) {
+    query.folder = form.folder
+  } else if (route.query.folder) {
+    query.folder = route.query.folder
+  }
+  
+  router.push({ path: '/', query })
 }
 
 function loadDocument() {
