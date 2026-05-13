@@ -113,7 +113,7 @@ def analysis_worker():
 
             analysis_queue = Document.objects.filter(
                 publish_status='published',
-                analysis_status='pending'
+                analysis_status='analyzing'
             ).order_by('updated_at')
 
             queue_count = analysis_queue.count()

@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db import connection
+from django.db import models
 from .models import KnowledgeBase, Directory, Folder, Document, DocumentVersion, Permission
 from .serializers import (
     KnowledgeBaseSerializer,
@@ -380,10 +381,10 @@ class DocumentQueueAnalyzeView(APIView):
                 return Response({'error': 'Document must be published before analysis'}, status=status.HTTP_400_BAD_REQUEST)
             if document.analysis_status == 'completed':
                 return Response({'error': 'Document analysis is already completed'}, status=status.HTTP_400_BAD_REQUEST)
-            if document.analysis_status == 'pending':
+            if document.analysis_status == 'analyzing':
                 return Response({'error': 'Document is already in analysis queue'}, status=status.HTTP_400_BAD_REQUEST)
 
-            document.analysis_status = 'pending'
+            document.analysis_status = 'analyzing'
             document.save(update_fields=['analysis_status'])
 
             serializer = DocumentSerializer(document)
@@ -414,6 +415,28 @@ class DocumentStatsView(APIView):
             'pending_analysis_count': pending_analysis_count,
             'analyzing_count': analyzing_count
         })
+
+
+class DocumentQueueListView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        knowledge_base_id = request.query_params.get('knowledge_base')
+        
+        queryset = Document.objects.all()
+        if knowledge_base_id:
+            queryset = queryset.filter(directory__knowledge_base_id=knowledge_base_id)
+        
+        # 获取所有未发布或待分析的文档
+        queue_docs = queryset.filter(
+            models.Q(publish_status='draft') | 
+            models.Q(publish_status='pending') |
+            models.Q(analysis_status='pending') | 
+            models.Q(analysis_status='analyzing')
+        ).order_by('updated_at')
+        
+        serializer = DocumentSerializer(queue_docs, many=True)
+        return Response(serializer.data)
 
 
 class DocumentTreeView(APIView):

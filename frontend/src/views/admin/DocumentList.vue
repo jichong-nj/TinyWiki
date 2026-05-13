@@ -12,7 +12,7 @@
         </el-breadcrumb>
       </div>
       <div class="stats-section">
-        <span class="stats-text">未发布{{ publishingCount }}/{{ draftCount }}条，待分析{{ analyzingCount }}/{{ pendingAnalysisCount }}条</span>
+        <span class="stats-text" @click="showQueueDialog = true">未发布{{ publishingCount }}/{{ draftCount + publishingCount }}条，待分析{{ analyzingCount }}/{{ pendingAnalysisCount + analyzingCount }}条</span>
       </div>
     </div>
     
@@ -314,6 +314,56 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog 
+      v-model="showQueueDialog" 
+      title="队列文档管理" 
+      width="80%" 
+      @open="loadQueueDocuments"
+    >
+      <div class="queue-list-header">
+        <div class="queue-list-title">
+          <span>共 {{ queueDocuments.length }} 个文档在队列中</span>
+        </div>
+        <div class="queue-list-actions">
+          <el-button type="text" size="small" @click="selectAllQueueDocs">
+            全选
+          </el-button>
+          <el-button type="text" size="small" @click="deselectAllQueueDocs">
+            取消全选
+          </el-button>
+        </div>
+      </div>
+      
+      <div class="queue-document-list">
+        <div v-for="doc in queueDocuments" :key="doc.id" class="queue-doc-item">
+          <el-checkbox v-model="selectedQueueDocs" :value="doc.id" />
+          <div class="queue-doc-info">
+            <div class="queue-doc-name">{{ doc.filename }}</div>
+            <div class="queue-doc-status">
+              <el-tag :type="getPublishTagType(doc.publish_status)" size="small">
+                {{ getPublishStatusText(doc.publish_status) }}
+              </el-tag>
+              <el-tag :type="getAnalysisTagType(doc.analysis_status)" size="small">
+                {{ getAnalysisStatusText(doc.analysis_status) }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showQueueDialog = false">关闭</el-button>
+        <el-button 
+          type="primary" 
+          @click="bulkPublishSelected" 
+          :loading="bulkPublishing"
+          :disabled="!selectedQueueDocs.length"
+        >
+          {{ bulkPublishing ? '发布中...' : `批量发布 (${selectedQueueDocs.length})` }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -386,6 +436,12 @@ const newSubfolderName = ref('')
 
 const showImportDialog = ref(false)
 const showZipImportDialog = ref(false)
+const showQueueDialog = ref(false)
+
+// 队列文档相关
+const queueDocuments = ref<Document[]>([])
+const selectedQueueDocs = ref<number[]>([])
+const bulkPublishing = ref(false)
 
 interface ImportFileItem {
   id: number
@@ -976,6 +1032,66 @@ async function bulkPublish() {
   }
 }
 
+// 队列管理相关函数
+function loadQueueDocuments() {
+  const params: Record<string, any> = {}
+  if (currentKnowledgeBase.value) {
+    params.knowledge_base = currentKnowledgeBase.value
+  }
+  axios.get('/documents/documents/queue/', { params })
+    .then(response => {
+      queueDocuments.value = response.data
+      selectedQueueDocs.value = []
+    })
+    .catch(error => console.error('加载队列文档失败:', error))
+}
+
+function selectAllQueueDocs() {
+  selectedQueueDocs.value = queueDocuments.value.map(doc => doc.id)
+}
+
+function deselectAllQueueDocs() {
+  selectedQueueDocs.value = []
+}
+
+async function bulkPublishSelected() {
+  if (selectedQueueDocs.value.length === 0) {
+    ElMessage.info('请选择要发布的文档')
+    return
+  }
+  
+  if (!confirm(`确定要将选中的 ${selectedQueueDocs.value.length} 个文档加入发布队列吗？`)) {
+    return
+  }
+  
+  bulkPublishing.value = true
+  let successCount = 0
+  let failCount = 0
+  
+  for (const docId of selectedQueueDocs.value) {
+    try {
+      await axios.post(`/documents/documents/${docId}/publish/`)
+      successCount++
+    } catch (error) {
+      failCount++
+      console.error(`文档 ${docId} 加入发布队列失败:`, error)
+    }
+  }
+  
+  // 重新加载队列文档和统计
+  loadQueueDocuments()
+  loadStats()
+  loadDocuments()
+  
+  bulkPublishing.value = false
+  
+  if (failCount === 0) {
+    ElMessage.success(`成功将 ${successCount} 个文档加入发布队列`)
+  } else {
+    ElMessage.warning(`成功将 ${successCount} 个文档加入发布队列，${failCount} 个失败`)
+  }
+}
+
 // ZIP 导入相关方法
 function handleZipFileChange(file: any) {
   zipFile.value = file.raw
@@ -1319,6 +1435,68 @@ onUnmounted(() => {
 
 .add-icon {
   margin-right: 4px;
+}
+
+.stats-section .stats-text {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.stats-section .stats-text:hover {
+  color: #1890ff;
+}
+
+.queue-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.queue-list-title {
+  font-size: 14px;
+  color: #666;
+}
+
+.queue-list-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.queue-document-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.queue-doc-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.queue-doc-item:hover {
+  background-color: #fafafa;
+}
+
+.queue-doc-info {
+  flex: 1;
+  margin-left: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.queue-doc-name {
+  font-size: 14px;
+  color: #333;
+}
+
+.queue-doc-status {
+  display: flex;
+  gap: 8px;
 }
 
 .document-list-container {
