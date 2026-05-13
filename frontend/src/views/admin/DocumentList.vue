@@ -123,8 +123,8 @@
             
             <div class="item-right">
               <div class="status-tags">
-                <el-tag :type="doc.publish_status === 'published' ? 'success' : 'warning'" size="small">
-                  {{ doc.publish_status === 'published' ? '已发布' : '未发布' }}
+                <el-tag :type="getPublishTagType(doc.publish_status)" size="small">
+                  {{ getPublishStatusText(doc.publish_status) }}
                 </el-tag>
                 <el-tag :type="getAnalysisTagType(doc.analysis_status)" size="small">
                   {{ getAnalysisStatusText(doc.analysis_status) }}
@@ -434,6 +434,19 @@ function updateStats() {
   pendingAnalysisCount.value = documents.value.filter(doc => doc.analysis_status !== 'completed').length
 }
 
+function loadStats() {
+  const params: Record<string, any> = {}
+  if (currentKnowledgeBase.value) {
+    params.knowledge_base = currentKnowledgeBase.value
+  }
+  axios.get('/documents/documents/stats/', { params })
+    .then(response => {
+      draftCount.value = response.data.draft_count
+      pendingAnalysisCount.value = response.data.pending_analysis_count
+    })
+    .catch(error => console.error('加载统计数据失败:', error))
+}
+
 function loadKnowledgeBases() {
   console.log('Loading knowledge bases...')
   axios.get('/documents/knowledge-bases/')
@@ -447,6 +460,8 @@ function loadKnowledgeBases() {
         }
         // Load directories and restore saved state
         loadDirectories()
+        // Load stats for entire knowledge base
+        loadStats()
       }
     })
     .catch(error => console.error('加载知识库失败:', error))
@@ -461,6 +476,7 @@ function onKnowledgeBaseChange() {
   folders.value = []
   documents.value = []
   loadDirectories()
+  loadStats()
   
   // 通知AdminLayout更新选择器
   window.dispatchEvent(new CustomEvent('documentListKnowledgeBaseChanged', { 
@@ -468,10 +484,27 @@ function onKnowledgeBaseChange() {
   }))
 }
 
+function getPublishTagType(status: string) {
+  switch (status) {
+    case 'published': return 'success'
+    case 'pending': return 'warning'
+    default: return 'info'
+  }
+}
+
+function getPublishStatusText(status: string) {
+  switch (status) {
+    case 'published': return '已发布'
+    case 'pending': return '发布中'
+    default: return '未发布'
+  }
+}
+
 function getAnalysisTagType(status: string) {
   switch (status) {
     case 'completed': return 'success'
     case 'analyzing': return 'warning'
+    case 'pending': return 'warning'
     default: return 'info'
   }
 }
@@ -480,6 +513,7 @@ function getAnalysisStatusText(status: string) {
   switch (status) {
     case 'completed': return '已分析'
     case 'analyzing': return '分析中'
+    case 'pending': return '待分析'
     default: return '未分析'
   }
 }
@@ -506,13 +540,11 @@ function loadDocuments() {
     params.directory = selectedDirectory.value
   } else {
     documents.value = []
-    updateStats()
     return
   }
   axios.get('/documents/documents/', { params })
     .then(response => {
       documents.value = response.data
-      updateStats()
     })
     .catch(error => console.error('加载文档失败:', error))
 }

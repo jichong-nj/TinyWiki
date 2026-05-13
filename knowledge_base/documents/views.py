@@ -357,6 +357,8 @@ class DocumentPublishView(APIView):
             document = Document.objects.get(pk=pk)
             if document.publish_status == 'published':
                 return Response({'error': 'Document is already published'}, status=status.HTTP_400_BAD_REQUEST)
+            if document.publish_status == 'pending':
+                return Response({'error': 'Document is already in publish queue'}, status=status.HTTP_400_BAD_REQUEST)
 
             document.publish_status = 'pending'
             document.analysis_status = 'pending'
@@ -378,6 +380,8 @@ class DocumentQueueAnalyzeView(APIView):
                 return Response({'error': 'Document must be published before analysis'}, status=status.HTTP_400_BAD_REQUEST)
             if document.analysis_status == 'completed':
                 return Response({'error': 'Document analysis is already completed'}, status=status.HTTP_400_BAD_REQUEST)
+            if document.analysis_status == 'pending':
+                return Response({'error': 'Document is already in analysis queue'}, status=status.HTTP_400_BAD_REQUEST)
 
             document.analysis_status = 'pending'
             document.save(update_fields=['analysis_status'])
@@ -386,6 +390,25 @@ class DocumentQueueAnalyzeView(APIView):
             return Response(serializer.data)
         except Document.DoesNotExist:
             return Response({'error': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class DocumentStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        knowledge_base_id = request.query_params.get('knowledge_base')
+        
+        queryset = Document.objects.all()
+        if knowledge_base_id:
+            queryset = queryset.filter(directory__knowledge_base_id=knowledge_base_id)
+        
+        draft_count = queryset.filter(publish_status='draft').count()
+        pending_analysis_count = queryset.filter(publish_status='published', analysis_status__in=['pending', 'analyzing']).count()
+        
+        return Response({
+            'draft_count': draft_count,
+            'pending_analysis_count': pending_analysis_count
+        })
 
 
 class DocumentTreeView(APIView):

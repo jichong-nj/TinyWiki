@@ -8,8 +8,11 @@
         <el-input v-model="form.title" placeholder="文档标题" class="title-input" />
       </div>
       <div class="header-right">
-        <el-button text @click="saveDraft">保存草稿</el-button>
-        <el-button type="primary" @click="saveAndPublish" v-if="isNew || (documentData && documentData.publish_status === 'draft')">保存并加入发布队列</el-button>
+        <el-button text @click="saveDraft" title="保存：文档存入数据库，不更新全文检索及embedding">保存草稿</el-button>
+        <el-button type="primary" @click="saveAndPublish" v-if="isNew || (documentData && documentData.publish_status === 'draft')" title="发布：分词入库，生成新版本，可被wiki站点查看搜索">保存并发布</el-button>
+        <el-button type="warning" disabled v-if="documentData && documentData.publish_status === 'pending'" title="正在发布中，等待队列处理">发布中...</el-button>
+        <el-button type="success" @click="analyzeDocument" v-if="documentData && documentData.publish_status === 'published' && documentData.analysis_status !== 'completed'" title="分析：生成embedding切片">分析</el-button>
+        <el-button type="success" disabled v-if="documentData && documentData.publish_status === 'published' && documentData.analysis_status === 'completed'" title="分析已完成">已分析</el-button>
       </div>
     </div>
     
@@ -150,7 +153,7 @@ function saveAndPublish() {
             ElMessage.success('文档已加入发布队列')
             // 保存后不退出，继续编辑
             router.replace({ path: `/document/${docId}`, query: route.query })
-            documentData.value = { ...response.data, publish_status: 'published' }
+            documentData.value = { ...response.data, publish_status: 'pending' }
           })
           .catch(error => {
             console.error('加入发布队列失败:', error)
@@ -168,7 +171,7 @@ function saveAndPublish() {
           .then(() => {
             ElMessage.success('文档已加入发布队列')
             // 保存后不退出，继续编辑
-            documentData.value = { ...response.data, publish_status: 'published' }
+            documentData.value = { ...response.data, publish_status: 'pending' }
           })
           .catch(error => {
             console.error('加入发布队列失败:', error)
@@ -180,6 +183,25 @@ function saveAndPublish() {
         ElMessage.error('加入发布队列失败')
       })
   }
+}
+
+function analyzeDocument() {
+  if (!documentData.value) return
+  
+  console.log('分析文档，ID:', documentData.value.id)
+  
+  axios.post(`/documents/documents/${documentData.value.id}/queue-analyze/`)
+    .then(() => {
+      ElMessage.success('文档已加入分析队列')
+      // 更新状态
+      if (documentData.value) {
+        documentData.value.analysis_status = 'pending'
+      }
+    })
+    .catch(error => {
+      console.error('加入分析队列失败:', error)
+      ElMessage.error(error.response?.data?.error || '加入分析队列失败')
+    })
 }
 
 onMounted(() => {

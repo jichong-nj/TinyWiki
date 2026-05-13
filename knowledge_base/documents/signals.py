@@ -12,7 +12,8 @@ from api.models import AIConfig
 
 CHUNK_SIZE = 500
 OVERLAP_SIZE = 100
-EMBEDDING_DELAY = 5  # embedding API调用间隔（秒）
+EMBEDDING_DELAY = 2  # embedding API调用间隔（秒）
+EMBEDDING_MAX_RETRIES = 5  # 每个chunk的最大重试次数
 
 
 def get_ai_config():
@@ -79,10 +80,21 @@ def create_chunks_with_embedding(document):
             input_type = ai_config.get('input_type', 'query')
             if input_type == 'document':
                 input_type = 'passage'
-            embedding = get_embedding(chunk_content, ai_config['api_key'], ai_config['base_url'], ai_config['model_name'], input_type)
+            
+            # 为每个chunk添加独立的重试逻辑
+            embedding = None
+            retries = 0
+            while retries < EMBEDDING_MAX_RETRIES and embedding is None:
+                try:
+                    embedding = get_embedding(chunk_content, ai_config['api_key'], ai_config['base_url'], ai_config['model_name'], input_type)
+                except Exception as e:
+                    print(f"Chunk {i} embedding attempt {retries + 1} failed: {e}")
+                    retries += 1
+                    if retries < EMBEDDING_MAX_RETRIES:
+                        time.sleep(EMBEDDING_DELAY)
             
             if embedding is None:
-                raise Exception(f"Failed to generate embedding for chunk {i}")
+                raise Exception(f"Failed to generate embedding for chunk {i} after {EMBEDDING_MAX_RETRIES} retries")
             
             embedding_json = json.dumps(embedding)
             
