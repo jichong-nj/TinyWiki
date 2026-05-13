@@ -49,16 +49,12 @@ const documentData = ref<Document | null>(null)
 const form = reactive({
   title: '',
   content: '',
-  directory: null,
-  folder: null
+  directory: null as number | null,
+  folder: null as number | null
 })
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back()
-  } else {
-    router.push('/')
-  }
+  router.push('/')
 }
 
 function loadDocument() {
@@ -95,9 +91,11 @@ function saveDraft() {
   
   if (isNew.value) {
     axios.post('/documents/documents/', data)
-      .then(() => {
+      .then((response) => {
         ElMessage.success('保存成功')
-        goBack()
+        // 保存后不退出，继续编辑
+        router.replace({ path: `/document/${response.data.id}`, query: route.query })
+        documentData.value = response.data
       })
       .catch(error => {
         console.error('保存失败:', error)
@@ -105,9 +103,10 @@ function saveDraft() {
       })
   } else {
     axios.put(`/documents/documents/${route.params.id}/`, data)
-      .then(() => {
+      .then((response) => {
         ElMessage.success('保存成功')
-        goBack()
+        // 保存后不退出，继续编辑
+        documentData.value = response.data
       })
       .catch(error => {
         console.error('保存失败:', error)
@@ -134,7 +133,9 @@ function saveAndPublish() {
         axios.post(`/documents/documents/${docId}/publish/`)
           .then(() => {
             ElMessage.success('文档已加入发布队列')
-            goBack()
+            // 保存后不退出，继续编辑
+            router.replace({ path: `/document/${docId}`, query: route.query })
+            documentData.value = { ...response.data, publish_status: 'published' }
           })
           .catch(error => {
             console.error('加入发布队列失败:', error)
@@ -147,11 +148,12 @@ function saveAndPublish() {
       })
   } else {
     axios.put(`/documents/documents/${route.params.id}/`, data)
-      .then(() => {
+      .then((response) => {
         axios.post(`/documents/documents/${route.params.id}/publish/`)
           .then(() => {
             ElMessage.success('文档已加入发布队列')
-            goBack()
+            // 保存后不退出，继续编辑
+            documentData.value = { ...response.data, publish_status: 'published' }
           })
           .catch(error => {
             console.error('加入发布队列失败:', error)

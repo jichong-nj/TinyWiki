@@ -317,7 +317,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
 import { ElMessage } from 'element-plus'
@@ -330,6 +330,8 @@ interface Document {
   publish_status: string
   analysis_status: string
   updated_at: string
+  directory: number | null
+  folder: number | null
 }
 
 interface Directory {
@@ -842,7 +844,15 @@ function createDocument() {
 }
 
 function editDocument(id: number) {
-  router.push(`/document/${id}`)
+  const doc = documents.value.find(d => d.id === id)
+  const query: any = {}
+  if (doc?.directory) {
+    query.directory = doc.directory
+  }
+  if (doc?.folder) {
+    query.folder = doc.folder
+  }
+  router.push({ path: `/document/${id}`, query })
 }
 
 function deleteDocument(id: number) {
