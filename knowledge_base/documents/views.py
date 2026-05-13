@@ -371,6 +371,48 @@ class DocumentPublishView(APIView):
             return Response({'error': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
+class DocumentBulkPublishView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        document_ids = request.data.get('document_ids', [])
+        
+        if not document_ids:
+            return Response({'error': 'No document IDs provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 获取所有文档
+        documents = Document.objects.filter(id__in=document_ids)
+        if not documents.exists():
+            return Response({'error': 'No valid documents found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # 过滤掉已经发布或已经在队列中的文档
+        docs_to_publish = []
+        skipped_docs = []
+        
+        for doc in documents:
+            if doc.publish_status == 'published':
+                skipped_docs.append({'id': doc.id, 'title': doc.title, 'reason': 'Already published'})
+            elif doc.publish_status == 'pending':
+                skipped_docs.append({'id': doc.id, 'title': doc.title, 'reason': 'Already in queue'})
+            else:
+                docs_to_publish.append(doc)
+        
+        # 批量更新状态
+        if docs_to_publish:
+            doc_ids = [d.id for d in docs_to_publish]
+            Document.objects.filter(id__in=doc_ids).update(
+                publish_status='pending',
+                analysis_status='pending'
+            )
+        
+        # 返回结果
+        return Response({
+            'success_count': len(docs_to_publish),
+            'skipped_count': len(skipped_docs),
+            'skipped_documents': skipped_docs
+        })
+
+
 class DocumentQueueAnalyzeView(APIView):
     permission_classes = [IsAuthenticated]
 

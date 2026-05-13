@@ -1181,41 +1181,42 @@ function deselectAllQueueDocs() {
 }
 
 async function bulkPublishSelected() {
-  if (selectedQueueDocs.value.length === 0) {
-    ElMessage.info('请选择要发布的文档')
-    return
-  }
-  
-  if (!confirm(`确定要将选中的 ${selectedQueueDocs.value.length} 个文档加入发布队列吗？`)) {
-    return
-  }
-  
-  bulkPublishing.value = true
-  let successCount = 0
-  let failCount = 0
-  
-  for (const docId of selectedQueueDocs.value) {
-    try {
-      await axios.post(`/documents/documents/${docId}/publish/`)
-      successCount++
-    } catch (error) {
-      failCount++
-      console.error(`文档 ${docId} 加入发布队列失败:`, error)
+    if (selectedQueueDocs.value.length === 0) {
+        ElMessage.info('请选择要发布的文档')
+        return
     }
-  }
-  
-  // 重新加载队列文档和统计
-  loadQueueDocuments()
-  loadStats()
-  loadDocuments()
-  
-  bulkPublishing.value = false
-  
-  if (failCount === 0) {
-    ElMessage.success(`成功将 ${successCount} 个文档加入发布队列`)
-  } else {
-    ElMessage.warning(`成功将 ${successCount} 个文档加入发布队列，${failCount} 个失败`)
-  }
+    
+    if (!confirm(`确定要将选中的 ${selectedQueueDocs.value.length} 个文档加入发布队列吗？`)) {
+        return
+    }
+    
+    bulkPublishing.value = true
+    
+    try {
+        const response = await axios.post('/documents/documents/bulk-publish/', {
+            document_ids: selectedQueueDocs.value
+        })
+        
+        const { success_count, skipped_count, skipped_documents } = response.data
+        
+        let message = `成功将 ${success_count} 个文档加入发布队列`
+        if (skipped_count > 0) {
+            message += `，跳过 ${skipped_count} 个文档`
+            console.log('Skipped documents:', skipped_documents)
+        }
+        
+        ElMessage.success(message)
+        
+    } catch (error: any) {
+        console.error('批量发布失败:', error)
+        ElMessage.error(error.response?.data?.error || '批量发布失败')
+    } finally {
+        bulkPublishing.value = false
+        // 重新加载队列文档和统计
+        loadQueueDocuments()
+        loadStats()
+        loadDocuments()
+    }
 }
 
 // 移动相关函数
