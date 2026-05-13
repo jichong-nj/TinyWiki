@@ -104,6 +104,7 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="editFolder(folder)">修改</el-dropdown-item>
+                    <el-dropdown-item @click="openMoveFolderDialog(folder)">移动</el-dropdown-item>
                     <el-dropdown-item @click="deleteFolder(folder.id)">删除</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -139,6 +140,7 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="editDocument(doc.id)">编辑</el-dropdown-item>
+                    <el-dropdown-item @click="openMoveDocumentDialog(doc)">移动</el-dropdown-item>
                     <el-dropdown-item @click="deleteDocument(doc.id)">删除</el-dropdown-item>
                     <el-dropdown-item v-if="doc.publish_status === 'draft'" @click="queuePublishDocument(doc.id)">加入发布队列</el-dropdown-item>
                     <el-dropdown-item v-if="doc.publish_status === 'published' && doc.analysis_status !== 'completed'" @click="queueAnalyzeDocument(doc.id)">加入分析队列</el-dropdown-item>
@@ -364,15 +366,131 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 移动文档对话框 -->
+    <el-dialog v-model="showMoveDocumentDialog" title="移动文档" width="500px" @open="loadFullTree">
+      <div class="move-target-selector">
+        <div class="tree-container">
+          <div v-for="dir in fullTree" :key="dir.id" class="tree-item">
+            <div 
+              class="tree-node"
+              :class="{ active: selectedMoveTarget?.type === 'directory' && selectedMoveTarget?.id === dir.id }"
+              @click="selectMoveTarget(dir)"
+            >
+              <el-icon><Folder /></el-icon>
+              <span>{{ dir.name }}</span>
+            </div>
+            <div v-if="dir.children && dir.children.length" class="tree-children">
+              <TreeNode 
+                :nodes="dir.children" 
+                :selected-id="selectedMoveTarget?.id"
+                :excluded-id="movingDocument?.folder"
+                @select="selectMoveTarget"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showMoveDocumentDialog = false">取消</el-button>
+        <el-button type="primary" @click="moveDocument" :disabled="!selectedMoveTarget">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 移动文件夹对话框 -->
+    <el-dialog v-model="showMoveFolderDialog" title="移动文件夹" width="500px" @open="loadFullTree">
+      <div class="move-target-selector">
+        <div class="tree-container">
+          <div v-for="dir in fullTree" :key="dir.id" class="tree-item">
+            <div 
+              class="tree-node"
+              :class="{ active: selectedMoveTarget?.type === 'directory' && selectedMoveTarget?.id === dir.id }"
+              @click="selectMoveTarget(dir)"
+            >
+              <el-icon><Folder /></el-icon>
+              <span>{{ dir.name }}</span>
+            </div>
+            <div v-if="dir.children && dir.children.length" class="tree-children">
+              <TreeNode 
+                :nodes="dir.children" 
+                :selected-id="selectedMoveTarget?.id"
+                :excluded-id="movingFolder?.id"
+                @select="selectMoveTarget"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showMoveFolderDialog = false">取消</el-button>
+        <el-button type="primary" @click="moveFolder" :disabled="!selectedMoveTarget">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from '../../axios'
 import { ElMessage } from 'element-plus'
 import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose, Upload, Folder } from '@element-plus/icons-vue'
+
+// 树节点组件
+const TreeNode = defineComponent({
+  name: 'TreeNode',
+  props: {
+    nodes: {
+      type: Array,
+      required: true
+    },
+    selectedId: {
+      type: Number,
+      default: null
+    },
+    excludedId: {
+      type: Number,
+      default: null
+    }
+  },
+  emits: ['select'],
+  setup(props, { emit }) {
+    const expanded = ref(true);
+    
+    return () => h('div', {}, 
+      props.nodes.map(node => {
+        if (props.excludedId && node.id === props.excludedId) {
+          return null; // 排除不能选择的节点
+        }
+        
+        return h('div', { key: node.id, class: 'tree-item' }, [
+          h('div', {
+            class: ['tree-node', { active: props.selectedId === node.id }],
+            onClick: () => emit('select', node)
+          }, [
+            h('div', { class: 'node-content' }, [
+              node.type === 'folder' && h(Folder, { class: 'node-icon' }),
+              h('span', { class: 'node-name' }, node.name)
+            ]),
+            node.children && node.children.length > 0 && h(ArrowRight, {
+              class: ['expand-icon', { rotated: expanded.value }],
+              onClick: (e) => {
+                e.stopPropagation();
+                expanded.value = !expanded.value;
+              }
+            })
+          ]),
+          node.children && node.children.length > 0 && expanded.value && h(TreeNode, {
+            nodes: node.children,
+            selectedId: props.selectedId,
+            excludedId: props.excludedId,
+            onSelect: (selectedNode) => emit('select', selectedNode)
+          })
+        ]);
+      })
+    );
+  }
+});
 
 interface Document {
   id: number
@@ -442,6 +560,14 @@ const showQueueDialog = ref(false)
 const queueDocuments = ref<Document[]>([])
 const selectedQueueDocs = ref<number[]>([])
 const bulkPublishing = ref(false)
+
+// 移动相关
+const showMoveDocumentDialog = ref(false)
+const showMoveFolderDialog = ref(false)
+const movingDocument = ref<Document | null>(null)
+const movingFolder = ref<Folder | null>(null)
+const fullTree = ref<any[]>([])
+const selectedMoveTarget = ref<any>(null)
 
 interface ImportFileItem {
   id: number
@@ -1092,6 +1218,121 @@ async function bulkPublishSelected() {
   }
 }
 
+// 移动相关函数
+function openMoveDocumentDialog(doc: Document) {
+  movingDocument.value = doc
+  selectedMoveTarget.value = null
+  showMoveDocumentDialog.value = true
+}
+
+function openMoveFolderDialog(folder: Folder) {
+  movingFolder.value = folder
+  selectedMoveTarget.value = null
+  showMoveFolderDialog.value = true
+}
+
+function loadFullTree() {
+  if (!currentKnowledgeBase.value) {
+    return
+  }
+  
+  axios.get(`/documents/knowledge-bases/${currentKnowledgeBase.value}/full-tree/`)
+    .then(response => {
+      fullTree.value = response.data
+    })
+    .catch(error => {
+      console.error('加载完整树失败:', error)
+      ElMessage.error('加载失败')
+    })
+}
+
+function selectMoveTarget(node: any) {
+  selectedMoveTarget.value = node
+}
+
+async function moveDocument() {
+  if (!movingDocument.value || !selectedMoveTarget.value) {
+    return
+  }
+  
+  try {
+    const data: any = {}
+    
+    if (selectedMoveTarget.value.type === 'directory') {
+      data.directory = selectedMoveTarget.value.id
+      data.folder = null
+    } else if (selectedMoveTarget.value.type === 'folder') {
+      // 查找文件夹所属的目录
+      const dir = findDirectoryForFolder(selectedMoveTarget.value.id)
+      data.directory = dir
+      data.folder = selectedMoveTarget.value.id
+    }
+    
+    await axios.post(`/documents/documents/${movingDocument.value.id}/move/`, data)
+    ElMessage.success('移动成功')
+    showMoveDocumentDialog.value = false
+    loadDocuments()
+  } catch (error: any) {
+    console.error('移动文档失败:', error)
+    ElMessage.error(error.response?.data?.error || '移动失败')
+  }
+}
+
+async function moveFolder() {
+  if (!movingFolder.value || !selectedMoveTarget.value) {
+    return
+  }
+  
+  try {
+    const data: any = {}
+    
+    if (selectedMoveTarget.value.type === 'directory') {
+      data.directory = selectedMoveTarget.value.id
+      data.parent = null
+    } else if (selectedMoveTarget.value.type === 'folder') {
+      // 查找文件夹所属的目录
+      const dir = findDirectoryForFolder(selectedMoveTarget.value.id)
+      data.directory = dir
+      data.parent = selectedMoveTarget.value.id
+    }
+    
+    await axios.post(`/documents/folders/${movingFolder.value.id}/move/`, data)
+    ElMessage.success('移动成功')
+    showMoveFolderDialog.value = false
+    loadFolders()
+  } catch (error: any) {
+    console.error('移动文件夹失败:', error)
+    ElMessage.error(error.response?.data?.error || '移动失败')
+  }
+}
+
+function findDirectoryForFolder(folderId: number): number | null {
+  // 在fullTree中查找文件夹所属的目录
+  for (const dir of fullTree.value) {
+    const found = findFolderInTree(dir, folderId)
+    if (found) {
+      return dir.id
+    }
+  }
+  return null
+}
+
+function findFolderInTree(node: any, folderId: number): boolean {
+  if (node.type === 'folder' && node.id === folderId) {
+    return true
+  }
+  
+  if (node.children) {
+    for (const child of node.children) {
+      if (findFolderInTree(child, folderId)) {
+        return true
+      }
+    }
+  }
+  
+  return false
+}
+
 // ZIP 导入相关方法
 function handleZipFileChange(file: any) {
   zipFile.value = file.raw
@@ -1202,21 +1443,8 @@ async function startZipImport() {
     
     const { success_count, total_count, results } = response.data
     
-    // 显示详细的导入结果
-    let detailMessage = ''
-    if (results && results.length > 0) {
-      const successFiles = results.filter((r: any) => r.status === 'success')
-      const errorFiles = results.filter((r: any) => r.status === 'error')
-      
-      if (successFiles.length > 0) {
-        detailMessage += `\n成功: ${successFiles.map((r: any) => r.path).join(', ')}`
-      }
-      if (errorFiles.length > 0) {
-        detailMessage += `\n失败: ${errorFiles.map((r: any) => `${r.path} (${r.error})`).join(', ')}`
-      }
-    }
-    
-    ElMessage.success(`成功导入 ${success_count}/${total_count} 个文件${detailMessage}`)
+    // 只显示数量，不显示所有文件名
+    ElMessage.success(`成功导入 ${success_count}/${total_count} 个文件`)
     
     // 延迟刷新，确保后端数据已保存
     setTimeout(() => {
@@ -1497,6 +1725,65 @@ onUnmounted(() => {
 .queue-doc-status {
   display: flex;
   gap: 8px;
+}
+
+/* 移动相关样式 */
+.move-target-selector {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.tree-container {
+  width: 100%;
+}
+
+.tree-container .tree-item {
+  margin-bottom: 4px;
+}
+
+.tree-container .tree-node {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tree-container .tree-node:hover {
+  background-color: #f5f7fa;
+}
+
+.tree-container .tree-node.active {
+  background-color: #ecf5ff;
+  color: #409eff;
+}
+
+.tree-container .node-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.tree-container .node-icon {
+  font-size: 16px;
+}
+
+.tree-container .expand-icon {
+  font-size: 14px;
+  transition: transform 0.2s;
+  color: #909399;
+}
+
+.tree-container .expand-icon.rotated {
+  transform: rotate(90deg);
+}
+
+.tree-container .tree-children {
+  margin-left: 24px;
+  padding-left: 8px;
+  border-left: 1px solid #e4e7ed;
 }
 
 .document-list-container {

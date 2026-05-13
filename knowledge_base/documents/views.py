@@ -439,6 +439,101 @@ class DocumentQueueListView(APIView):
         return Response(serializer.data)
 
 
+class MoveDocumentView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        try:
+            document = Document.objects.get(pk=pk)
+        except Document.DoesNotExist:
+            return Response({'error': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        directory_id = request.data.get('directory')
+        folder_id = request.data.get('folder')
+        
+        # 验证目标位置是否在同一个知识库
+        if directory_id:
+            try:
+                target_directory = Directory.objects.get(pk=directory_id)
+                if document.directory and document.directory.knowledge_base_id != target_directory.knowledge_base_id:
+                    return Response({'error': 'Cannot move document to different knowledge base'}, status=status.HTTP_400_BAD_REQUEST)
+            except Directory.DoesNotExist:
+                return Response({'error': 'Target directory not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if folder_id:
+            try:
+                target_folder = Folder.objects.get(pk=folder_id)
+                if target_folder.directory and document.directory:
+                    if target_folder.directory.knowledge_base_id != document.directory.knowledge_base_id:
+                        return Response({'error': 'Cannot move document to different knowledge base'}, status=status.HTTP_400_BAD_REQUEST)
+            except Folder.DoesNotExist:
+                return Response({'error': 'Target folder not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # 更新位置
+        document.directory_id = directory_id
+        document.folder_id = folder_id
+        document.save()
+        
+        serializer = DocumentSerializer(document)
+        return Response(serializer.data)
+
+
+class MoveFolderView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        try:
+            folder = Folder.objects.get(pk=pk)
+        except Folder.DoesNotExist:
+            return Response({'error': 'Folder not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        directory_id = request.data.get('directory')
+        parent_id = request.data.get('parent')
+        
+        # 不能移动到自己或其子文件夹中
+        if parent_id:
+            if self._is_ancestor_or_self(folder, parent_id):
+                return Response({'error': 'Cannot move folder into itself or its subfolders'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 验证目标位置是否在同一个知识库
+        if directory_id:
+            try:
+                target_directory = Directory.objects.get(pk=directory_id)
+                if folder.directory and folder.directory.knowledge_base_id != target_directory.knowledge_base_id:
+                    return Response({'error': 'Cannot move folder to different knowledge base'}, status=status.HTTP_400_BAD_REQUEST)
+            except Directory.DoesNotExist:
+                return Response({'error': 'Target directory not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if parent_id:
+            try:
+                target_parent = Folder.objects.get(pk=parent_id)
+                if target_parent.directory and folder.directory:
+                    if target_parent.directory.knowledge_base_id != folder.directory.knowledge_base_id:
+                        return Response({'error': 'Cannot move folder to different knowledge base'}, status=status.HTTP_400_BAD_REQUEST)
+            except Folder.DoesNotExist:
+                return Response({'error': 'Target parent folder not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # 更新位置
+        folder.directory_id = directory_id
+        folder.parent_id = parent_id
+        folder.save()
+        
+        serializer = FolderSerializer(folder)
+        return Response(serializer.data)
+    
+    def _is_ancestor_or_self(self, folder, target_id):
+        """检查目标文件夹是否是当前文件夹或其祖先"""
+        if folder.id == target_id:
+            return True
+        
+        current = folder.parent
+        while current:
+            if current.id == target_id:
+                return True
+            current = current.parent
+        return False
+
+
 class DocumentTreeView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -500,6 +595,53 @@ class DocumentTreeView(APIView):
                     'updated_at': doc.updated_at.isoformat()
                 })
             tree.append(folder_data)
+        return tree
+
+
+class FullTreeView(APIView):
+    """获取完整的文件夹树，用于移动选择"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, knowledge_base_id):
+        try:
+            base = KnowledgeBase.objects.get(pk=knowledge_base_id)
+        except KnowledgeBase.DoesNotExist:
+            return Response({'error': 'KnowledgeBase not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        tree = []
+        directories = Directory.objects.filter(knowledge_base=base)
+        
+        for directory in directories:
+            dir_node = {
+                'id': directory.id,
+                'name': directory.name,
+                'type': 'directory',
+                'children': []
+            }
+            
+            # 添加顶级文件夹
+            folders = Folder.objects.filter(directory=directory, parent__isnull=True)
+            dir_node['children'] = self._build_folder_tree_for_move(folders)
+            
+            tree.append(dir_node)
+        
+        return Response(tree)
+    
+    def _build_folder_tree_for_move(self, folders):
+        tree = []
+        for folder in folders:
+            folder_node = {
+                'id': folder.id,
+                'name': folder.name,
+                'type': 'folder',
+                'children': []
+            }
+            
+            # 递归添加子文件夹
+            children = folder.children.all()
+            folder_node['children'] = self._build_folder_tree_for_move(children)
+            
+            tree.append(folder_node)
         return tree
 
 

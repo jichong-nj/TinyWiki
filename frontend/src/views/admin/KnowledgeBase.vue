@@ -27,7 +27,7 @@
     </el-table>
     
     <el-dialog v-model="showCreateModal" :title="isEditing ? '编辑知识库' : '创建知识库'" width="400px">
-      <el-form :model="form" label-width="80px">
+      <el-form :model="form" label-width="80px" @submit.prevent="saveKnowledgeBase">
         <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入知识库名称" />
         </el-form-item>
@@ -38,7 +38,7 @@
       
       <template #footer>
         <el-button @click="showCreateModal = false">取消</el-button>
-        <el-button type="primary" @click="saveKnowledgeBase">保存</el-button>
+        <el-button type="primary" native-type="submit" @click="saveKnowledgeBase">保存</el-button>
       </template>
     </el-dialog>
     

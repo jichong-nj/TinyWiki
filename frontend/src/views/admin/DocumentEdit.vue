@@ -3,6 +3,7 @@
     <div class="edit-header">
       <div class="header-left">
         <el-button @click="goBack">返回</el-button>
+        <el-button v-if="documentData" @click="downloadOriginal">下载原文</el-button>
       </div>
       <div class="header-center">
         <el-input v-model="form.title" placeholder="文档标题" class="title-input" />
@@ -202,6 +203,21 @@ function analyzeDocument() {
       console.error('加入分析队列失败:', error)
       ElMessage.error(error.response?.data?.error || '加入分析队列失败')
     })
+}
+
+function downloadOriginal() {
+  if (!documentData.value) return
+  
+  // 创建一个Blob并下载
+  const content = form.content || ''
+  const filename = documentData.value.filename || (form.title + '.md')
+  const blob = new Blob([content], { type: 'text/markdown' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 onMounted(() => {
