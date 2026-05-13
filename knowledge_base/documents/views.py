@@ -125,21 +125,26 @@ class FolderListView(APIView):
         print(f'FolderListView查询: directory={directory_id}, parent={parent_id}')
         
         folders = Folder.objects.all()
-        if directory_id:
-            folders = folders.filter(directory_id=directory_id)
         
-        # 处理parent参数，支持 null/None/空字符串 表示顶层文件夹
+        # 处理parent参数
         if parent_id is not None:
             if parent_id == 'null' or parent_id == 'None' or parent_id == '':
-                # 明确请求顶层文件夹（parent为空）
+                # 明确请求顶层文件夹（parent为空），需要过滤directory
+                if directory_id:
+                    folders = folders.filter(directory_id=directory_id)
                 folders = folders.filter(parent__isnull=True)
             else:
-                # 请求特定parent的子文件夹
+                # 请求特定parent的子文件夹，不需要过滤directory（子文件夹可能没有directory）
                 try:
                     parent_id_int = int(parent_id)
                     folders = folders.filter(parent_id=parent_id_int)
                 except (ValueError, TypeError):
                     pass
+        else:
+            # 如果没有parent参数，默认只返回顶层文件夹，需要过滤directory
+            if directory_id:
+                folders = folders.filter(directory_id=directory_id)
+            folders = folders.filter(parent__isnull=True)
         
         print(f'返回文件夹数量: {len(folders)}')
         for f in folders:
@@ -352,19 +357,33 @@ class DocumentPublishView(APIView):
             document = Document.objects.get(pk=pk)
             if document.publish_status == 'published':
                 return Response({'error': 'Document is already published'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # 导入发布函数并执行
-            from .signals import publish_document
-            success, error_message = publish_document(document)
-            
-            if success:
-                serializer = DocumentSerializer(document)
-                return Response(serializer.data)
-            else:
-                return Response(
-                    {'error': f'Publish failed: {error_message}'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+
+            document.publish_status = 'pending'
+            document.analysis_status = 'pending'
+            document.save(update_fields=['publish_status', 'analysis_status'])
+
+            serializer = DocumentSerializer(document)
+            return Response(serializer.data)
+        except Document.DoesNotExist:
+            return Response({'error': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class DocumentQueueAnalyzeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            document = Document.objects.get(pk=pk)
+            if document.publish_status != 'published':
+                return Response({'error': 'Document must be published before analysis'}, status=status.HTTP_400_BAD_REQUEST)
+            if document.analysis_status == 'completed':
+                return Response({'error': 'Document analysis is already completed'}, status=status.HTTP_400_BAD_REQUEST)
+
+            document.analysis_status = 'pending'
+            document.save(update_fields=['analysis_status'])
+
+            serializer = DocumentSerializer(document)
+            return Response(serializer.data)
         except Document.DoesNotExist:
             return Response({'error': 'Document not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -375,7 +394,14 @@ class DocumentTreeView(APIView):
     def get(self, request, knowledge_base_id):
         try:
             base = KnowledgeBase.objects.get(pk=knowledge_base_id)
-            directories = Directory.objects.filter(knowledge_base=base)
+            directory_id = request.query_params.get('directory')
+            if directory_id:
+                directories = Directory.objects.filter(pk=directory_id, knowledge_base=base)
+                if not directories.exists():
+                    return Response({'error': 'Directory not found in knowledge base'}, status=status.HTTP_404_NOT_FOUND)
+            else:
+                directories = Directory.objects.filter(knowledge_base=base)
+
             tree = []
             for directory in directories:
                 folders = Folder.objects.filter(directory=directory, parent__isnull=True)

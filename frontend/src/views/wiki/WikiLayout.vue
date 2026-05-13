@@ -372,13 +372,27 @@ const loadKnowledgeBases = async () => {
   }
 }
 
+watch(selectedKB, async (newKB) => {
+  if (newKB) {
+    await onKBChange()
+  } else {
+    directories.value = []
+    currentTreeItems.value = []
+  }
+})
+
 const onKBChange = async () => {
+  // 重置所有状态
   selectedDirectory.value = null
   selectedFile.value = null
   renderedContent.value = ''
   tocItems.value = []
+  currentTreeItems.value = []
+  expandedNodes.value.clear()
+
   if (selectedKB.value) {
     await loadDirectories()
+    // loadDirectories() 已经会自动选择第一个目录，watch(selectedDirectory) 会自动调用 loadTree()
   }
 }
 
@@ -407,10 +421,12 @@ const selectDirectory = async (dir: Directory) => {
 }
 
 const loadTree = async () => {
-    if (!selectedKB.value) return
+    if (!selectedKB.value || !selectedDirectory.value) return
     
     try {
-        const response = await axios.get(`/documents/knowledge-bases/${selectedKB.value.id}/tree/`)
+        const response = await axios.get(`/documents/knowledge-bases/${selectedKB.value.id}/tree/`, {
+          params: { directory: selectedDirectory.value.id }
+        })
         const flatItems: any[] = []
         let firstDocument: any = null
         
@@ -426,23 +442,23 @@ const loadTree = async () => {
                     updated_at: item.updated_at
                 }
                 flatItems.push(itemData)
-                
-                // 记录第一个文档
+
                 if (item.type === 'document' && !firstDocument) {
                     firstDocument = itemData
                 }
-                
+
                 if (item.children?.length) {
                     flatten(item.children, item.id)
                 }
             })
         }
-        
-        const filtered = response.data.filter((d: any) => d.id === selectedDirectory.value?.id)
-        filtered.forEach((d: any) => flatten(d.children || []))
+
+        const rootNodes = Array.isArray(response.data)
+          ? response.data.flatMap((d: any) => d.children || [])
+          : []
+        flatten(rootNodes)
         currentTreeItems.value = flatItems
-        
-        // 如果有文档且当前没有选中的文档，自动选中第一个
+
         if (firstDocument && !selectedFile.value) {
             await handleItemClick(firstDocument)
         }
@@ -583,10 +599,6 @@ const navigateTo = (url: string | null) => {
     console.log('Navigate to:', url)
   }
 }
-
-watch(selectedKB, () => {
-  loadDirectories()
-})
 
 watch(selectedDirectory, () => {
   loadTree()

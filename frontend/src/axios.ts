@@ -8,6 +8,7 @@ const instance = axios.create({
 // 请求拦截器：自动设置Content-Type
 instance.interceptors.request.use(
   config => {
+    console.log('Making request to:', config.url)
     // 如果是FormData，不要设置Content-Type，让浏览器自动处理
     if (!(config.data instanceof FormData)) {
       config.headers = config.headers || {}
@@ -18,6 +19,9 @@ instance.interceptors.request.use(
     if (token) {
       config.headers = config.headers || {}
       config.headers['Authorization'] = `Bearer ${token}`
+      console.log('Added auth header for request to:', config.url)
+    } else {
+      console.log('No auth token found for request to:', config.url)
     }
     return config
   },

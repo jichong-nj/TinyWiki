@@ -3,6 +3,7 @@ from django.dispatch import receiver
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import connection
 import json
+import time
 
 from .models import Document, DocumentChunk
 from .embedding import split_text, clean_markdown, get_embedding
@@ -11,6 +12,7 @@ from api.models import AIConfig
 
 CHUNK_SIZE = 500
 OVERLAP_SIZE = 100
+EMBEDDING_DELAY = 5  # embedding API调用间隔（秒）
 
 
 def get_ai_config():
@@ -93,6 +95,10 @@ def create_chunks_with_embedding(document):
                 chunk_size=CHUNK_SIZE,
                 overlap_size=OVERLAP_SIZE
             )
+            
+            # 在处理完一个chunk后添加时延，避免API调用过于频繁
+            if i < len(chunks) - 1:  # 不是最后一个chunk时才添加时延
+                time.sleep(EMBEDDING_DELAY)
     except Exception as e:
         print(f"Error creating chunks with embedding: {e}")
         # 清理已创建的部分数据

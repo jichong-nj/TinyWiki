@@ -9,7 +9,7 @@
       </div>
       <div class="header-right">
         <el-button text @click="saveDraft">保存草稿</el-button>
-        <el-button type="primary" @click="saveAndPublish" v-if="isNew || (documentData && documentData.publish_status === 'draft')">发布</el-button>
+        <el-button type="primary" @click="saveAndPublish" v-if="isNew || (documentData && documentData.publish_status === 'draft')">保存并加入发布队列</el-button>
       </div>
     </div>
     
@@ -127,26 +127,34 @@ function saveAndPublish() {
         const docId = response.data.id
         axios.post(`/documents/documents/${docId}/publish/`)
           .then(() => {
-            ElMessage.success('发布成功')
+            ElMessage.success('文档已加入发布队列')
             goBack()
+          })
+          .catch(error => {
+            console.error('加入发布队列失败:', error)
+            ElMessage.error('加入发布队列失败')
           })
       })
       .catch(error => {
-        console.error('发布失败:', error)
-        ElMessage.error('发布失败')
+        console.error('加入发布队列失败:', error)
+        ElMessage.error('加入发布队列失败')
       })
   } else {
     axios.put(`/documents/documents/${route.params.id}/`, data)
       .then(() => {
         axios.post(`/documents/documents/${route.params.id}/publish/`)
           .then(() => {
-            ElMessage.success('发布成功')
+            ElMessage.success('文档已加入发布队列')
             goBack()
+          })
+          .catch(error => {
+            console.error('加入发布队列失败:', error)
+            ElMessage.error('加入发布队列失败')
           })
       })
       .catch(error => {
-        console.error('发布失败:', error)
-        ElMessage.error('发布失败')
+        console.error('加入发布队列失败:', error)
+        ElMessage.error('加入发布队列失败')
       })
   }
 }

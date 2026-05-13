@@ -139,7 +139,8 @@
                   <el-dropdown-menu>
                     <el-dropdown-item @click="editDocument(doc.id)">编辑</el-dropdown-item>
                     <el-dropdown-item @click="deleteDocument(doc.id)">删除</el-dropdown-item>
-                    <el-dropdown-item v-if="doc.publish_status === 'draft'" @click="publishDocument(doc.id)">发布</el-dropdown-item>
+                    <el-dropdown-item v-if="doc.publish_status === 'draft'" @click="queuePublishDocument(doc.id)">加入发布队列</el-dropdown-item>
+                    <el-dropdown-item v-if="doc.publish_status === 'published' && doc.analysis_status !== 'completed'" @click="queueAnalyzeDocument(doc.id)">加入分析队列</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -316,7 +317,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '../../axios'
 import { ElMessage } from 'element-plus'
@@ -345,8 +346,16 @@ interface Folder {
   updated_at: string
 }
 
+interface KnowledgeBase {
+  id: number
+  name: string
+  description?: string
+}
+
 const router = useRouter()
 
+const knowledgeBases = ref<KnowledgeBase[]>([])
+const currentKnowledgeBase = ref<number | null>(null)
 const documents = ref<Document[]>([])
 const directories = ref<Directory[]>([])
 const folders = ref<Folder[]>([])
@@ -411,6 +420,38 @@ function updateStats() {
   draftCount.value = documents.value.filter(doc => doc.publish_status === 'draft').length
   pendingAnalysisCount.value = documents.value.filter(doc => doc.analysis_status !== 'completed').length
 }
+
+function loadKnowledgeBases() {
+  console.log('Loading knowledge bases...')
+  axios.get('/documents/knowledge-bases/')
+    .then(response => {
+      console.log('Knowledge bases loaded:', response.data)
+      knowledgeBases.value = response.data
+      if (knowledgeBases.value.length > 0 && currentKnowledgeBase.value === null) {
+        console.log('Setting default knowledge base:', knowledgeBases.value[0].id)
+        currentKnowledgeBase.value = knowledgeBases.value[0].id
+        onKnowledgeBaseChange()
+      }
+    })
+    .catch(error => console.error('加载知识库失败:', error))
+}
+
+function onKnowledgeBaseChange() {
+  console.log('DocumentList: 知识库切换到:', currentKnowledgeBase.value)
+  selectedDirectory.value = null
+  selectedFolder.value = null
+  breadcrumbFolders.value = []
+  directories.value = []
+  folders.value = []
+  documents.value = []
+  loadDirectories()
+  
+  // 通知AdminLayout更新选择器
+  window.dispatchEvent(new CustomEvent('documentListKnowledgeBaseChanged', { 
+    detail: { knowledgeBaseId: currentKnowledgeBase.value } 
+  }))
+}
+
 function getAnalysisTagType(status: string) {
   switch (status) {
     case 'completed': return 'success'
@@ -443,11 +484,14 @@ function formatDateTime(dateStr: string): string {
 
 function loadDocuments() {
   const params: Record<string, number> = {}
-  if (selectedDirectory.value) {
-    params.directory = selectedDirectory.value
-  }
   if (selectedFolder.value) {
     params.folder = selectedFolder.value
+  } else if (selectedDirectory.value) {
+    params.directory = selectedDirectory.value
+  } else {
+    documents.value = []
+    updateStats()
+    return
   }
   axios.get('/documents/documents/', { params })
     .then(response => {
@@ -458,33 +502,70 @@ function loadDocuments() {
 }
 
 function loadFolders() {
-  const params: Record<string, any> = {}
-  if (selectedFolder.value) {
-    params.parent = selectedFolder.value
-  } else if (selectedDirectory.value) {
-    params.directory = selectedDirectory.value
-    params.parent = 'null' // 明确发送字符串"null"来表示顶层文件夹
+  console.log('loadFolders 被调用')
+  if (!selectedDirectory.value) {
+    console.log('selectedDirectory.value 为空，清除 folders')
+    folders.value = []
+    return
   }
-  console.log('loadFolders参数:', params)
+  const params: Record<string, any> = {
+    directory: selectedDirectory.value
+  }
+  
+  // 只有当selectedFolder有值时才添加parent参数
+  if (selectedFolder.value !== null) {
+    params.parent = selectedFolder.value
+    console.log('添加 parent 参数:', selectedFolder.value)
+  } else {
+    console.log('不添加 parent 参数（显示顶层文件夹）')
+  }
+  
+  console.log('最终 loadFolders 参数:', params)
+  console.log('发送请求到 /documents/folders/')
   axios.get('/documents/folders/', { params })
     .then(response => {
-      console.log('loadFolders返回:', response.data)
+      console.log('loadFolders 响应成功，数据长度:', response.data.length)
+      console.log('返回的文件夹数据:', response.data)
       folders.value = response.data
     })
-    .catch(error => console.error('加载文件夹失败:', error))
+    .catch(error => {
+      console.error('加载文件夹失败:', error)
+      console.error('错误详情:', error.response?.data)
+    })
 }
 
 function loadDirectories() {
-  axios.get('/documents/directories/')
+  console.log('loadDirectories called, currentKnowledgeBase:', currentKnowledgeBase.value)
+  if (!currentKnowledgeBase.value) {
+    console.log('No knowledge base selected, clearing data')
+    directories.value = []
+    selectedDirectory.value = null
+    documents.value = []
+    folders.value = []
+    updateStats()
+    return
+  }
+
+  const params: Record<string, any> = {
+    knowledge_base: currentKnowledgeBase.value
+  }
+  console.log('Sending request to /documents/directories/ with params:', params)
+  axios.get('/documents/directories/', { params })
     .then(response => {
+      console.log('loadDirectories response:', response.data)
       directories.value = response.data
       if (directories.value.length > 0 && !selectedDirectory.value) {
         selectedDirectory.value = directories.value[0].id
         loadDocuments()
         loadFolders()
+      } else {
+        loadDocuments()
+        loadFolders()
       }
     })
-    .catch(error => console.error('加载目录失败:', error))
+    .catch(error => {
+      console.error('加载目录失败:', error)
+    })
 }
 
 function selectDirectory(id: number) {
@@ -496,8 +577,11 @@ function selectDirectory(id: number) {
 }
 
 function drillIntoFolder(folder: Folder) {
+  console.log('drillIntoFolder 被调用，folder:', folder)
   selectedFolder.value = folder.id
+  console.log('设置 selectedFolder.value 为:', selectedFolder.value)
   breadcrumbFolders.value.push(folder)
+  console.log('breadcrumbFolders 现在包含:', breadcrumbFolders.value.length, '个文件夹')
   loadDocuments()
   loadFolders()
 }
@@ -553,12 +637,12 @@ function updateDirectory() {
 }
 
 function createDirectory() {
-  if (!newDirName.value.trim()) {
+  if (!newDirName.value.trim() || !currentKnowledgeBase.value) {
     return
   }
   axios.post('/documents/directories/', {
     name: newDirName.value,
-    knowledge_base: 1
+    knowledge_base: currentKnowledgeBase.value
   })
   .then(() => {
     loadDirectories()
@@ -764,12 +848,20 @@ function deleteDocument(id: number) {
   }
 }
 
-function publishDocument(id: number) {
+function queuePublishDocument(id: number) {
   axios.post(`/documents/documents/${id}/publish/`)
     .then(() => {
       loadDocuments()
     })
-    .catch(error => console.error('发布文档失败:', error))
+    .catch(error => console.error('加入发布队列失败:', error))
+}
+
+function queueAnalyzeDocument(id: number) {
+  axios.post(`/documents/documents/${id}/queue-analyze/`)
+    .then(() => {
+      loadDocuments()
+    })
+    .catch(error => console.error('加入分析队列失败:', error))
 }
 
 // ZIP 导入相关方法
@@ -932,10 +1024,24 @@ function formatFileSize(bytes: number): string {
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
 
+function handleAdminLayoutKnowledgeBaseChange(event: CustomEvent) {
+  const newKnowledgeBaseId = event.detail.knowledgeBaseId
+  console.log('DocumentList: 收到AdminLayout知识库切换事件:', newKnowledgeBaseId)
+  if (currentKnowledgeBase.value !== newKnowledgeBaseId) {
+    currentKnowledgeBase.value = newKnowledgeBaseId
+    onKnowledgeBaseChange()
+  }
+}
+
 onMounted(() => {
-  loadDocuments()
-  loadDirectories()
-  loadFolders()
+  loadKnowledgeBases()
+  // 监听来自AdminLayout的知识库切换事件
+  window.addEventListener('knowledgeBaseChanged', handleAdminLayoutKnowledgeBaseChange as EventListener)
+})
+
+onUnmounted(() => {
+  // 清理事件监听器
+  window.removeEventListener('knowledgeBaseChanged', handleAdminLayoutKnowledgeBaseChange as EventListener)
 })
 </script>
 

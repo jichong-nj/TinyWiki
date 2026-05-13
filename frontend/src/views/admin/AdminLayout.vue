@@ -28,7 +28,7 @@
     <main class="main-content">
       <header class="top-header">
         <div class="header-left">
-          <el-select v-model="currentKnowledgeBase" placeholder="选择知识库">
+          <el-select v-model="currentKnowledgeBase" placeholder="选择知识库" @change="onKnowledgeBaseChange">
             <el-option v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id" />
           </el-select>
         </div>
@@ -57,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import axios from '../../axios'
@@ -92,15 +92,38 @@ function loadKnowledgeBases() {
   axios.get('/documents/knowledge-bases/')
     .then(response => {
       knowledgeBases.value = response.data
-      if (knowledgeBases.value.length > 0) {
+      if (knowledgeBases.value.length > 0 && currentKnowledgeBase.value === null) {
         currentKnowledgeBase.value = knowledgeBases.value[0].id
       }
     })
     .catch(error => console.error('加载知识库失败:', error))
 }
 
+function onKnowledgeBaseChange() {
+  console.log('AdminLayout: 知识库切换到:', currentKnowledgeBase.value)
+  // 通过自定义事件通知子组件
+  window.dispatchEvent(new CustomEvent('knowledgeBaseChanged', { 
+    detail: { knowledgeBaseId: currentKnowledgeBase.value } 
+  }))
+}
+
+function handleDocumentListKnowledgeBaseChange(event: CustomEvent) {
+  const newKnowledgeBaseId = event.detail.knowledgeBaseId
+  console.log('AdminLayout: 收到DocumentList知识库切换事件:', newKnowledgeBaseId)
+  if (currentKnowledgeBase.value !== newKnowledgeBaseId) {
+    currentKnowledgeBase.value = newKnowledgeBaseId
+  }
+}
+
 onMounted(() => {
   loadKnowledgeBases()
+  // 监听来自DocumentList的知识库切换事件
+  window.addEventListener('documentListKnowledgeBaseChanged', handleDocumentListKnowledgeBaseChange as EventListener)
+})
+
+onUnmounted(() => {
+  // 清理事件监听器
+  window.removeEventListener('documentListKnowledgeBaseChanged', handleDocumentListKnowledgeBaseChange as EventListener)
 })
 </script>
 
