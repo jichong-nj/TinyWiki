@@ -70,6 +70,7 @@
                 <el-dropdown-menu>
                   <el-dropdown-item @click="createDocument">创建文档</el-dropdown-item>
                   <el-dropdown-item @click="showSubfolderDialog = true">创建子文件夹</el-dropdown-item>
+                  <el-dropdown-item @click="bulkPublish">批量发布</el-dropdown-item>
                   <el-dropdown-item>批量删除</el-dropdown-item>
                   <el-dropdown-item>导出</el-dropdown-item>
                 </el-dropdown-menu>
@@ -436,10 +437,10 @@ function updateStats() {
   draftCount.value = documents.value.filter(doc => doc.publish_status === 'draft').length
   publishingCount.value = documents.value.filter(doc => doc.publish_status === 'pending').length
   pendingAnalysisCount.value = documents.value.filter(doc => 
-    doc.publish_status === 'published' && doc.analysis_status === 'pending'
+    doc.analysis_status === 'pending'
   ).length
   analyzingCount.value = documents.value.filter(doc => 
-    doc.publish_status === 'published' && doc.analysis_status === 'analyzing'
+    doc.analysis_status === 'analyzing'
   ).length
 }
 
@@ -940,6 +941,39 @@ function queueAnalyzeDocument(id: number) {
       loadDocuments()
     })
     .catch(error => console.error('加入分析队列失败:', error))
+}
+
+async function bulkPublish() {
+  const draftDocs = documents.value.filter(doc => doc.publish_status === 'draft')
+  if (draftDocs.length === 0) {
+    ElMessage.info('没有需要发布的文档')
+    return
+  }
+  
+  if (!confirm(`确定要将当前 ${draftDocs.length} 个未发布文档加入发布队列吗？`)) {
+    return
+  }
+  
+  let successCount = 0
+  let failCount = 0
+  
+  for (const doc of draftDocs) {
+    try {
+      await axios.post(`/documents/documents/${doc.id}/publish/`)
+      successCount++
+    } catch (error) {
+      failCount++
+      console.error(`文档 ${doc.filename} 加入发布队列失败:`, error)
+    }
+  }
+  
+  loadDocuments()
+  
+  if (failCount === 0) {
+    ElMessage.success(`成功将 ${successCount} 个文档加入发布队列`)
+  } else {
+    ElMessage.warning(`成功将 ${successCount} 个文档加入发布队列，${failCount} 个失败`)
+  }
 }
 
 // ZIP 导入相关方法

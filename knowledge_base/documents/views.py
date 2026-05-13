@@ -405,8 +405,8 @@ class DocumentStatsView(APIView):
         draft_count = queryset.filter(publish_status='draft').count()
         publishing_count = queryset.filter(publish_status='pending').count()
         
-        pending_analysis_count = queryset.filter(publish_status='published', analysis_status='pending').count()
-        analyzing_count = queryset.filter(publish_status='published', analysis_status='analyzing').count()
+        pending_analysis_count = queryset.filter(analysis_status='pending').count()
+        analyzing_count = queryset.filter(analysis_status='analyzing').count()
         
         return Response({
             'draft_count': draft_count,
