@@ -39,7 +39,10 @@ class DocumentSerializer(serializers.ModelSerializer):
         fields = ['id', 'directory', 'folder', 'title', 'filename', 'content', 'order', 'publish_status', 'analysis_status', 'created_at', 'updated_at', 'current_version']
     
     def get_current_version(self, obj):
-        return obj.get_current_version()
+        current = obj.get_current_version()
+        if current:
+            return DocumentVersionSerializer(current).data
+        return None
 
 
 class PermissionSerializer(serializers.ModelSerializer):

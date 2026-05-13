@@ -138,6 +138,10 @@ class Document(models.Model):
     
     def __str__(self):
         return self.title
+    
+    def get_current_version(self):
+        # 获取最新版本
+        return self.versions.order_by('-version_number').first()
 
 
 class DocumentVersion(models.Model):
