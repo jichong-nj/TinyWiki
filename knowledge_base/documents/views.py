@@ -1935,3 +1935,107 @@ class ZipImportView(APIView):
         except Exception as e:
             return Response({'error': f'导入zip文件失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class ReorderKnowledgeBasesView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        ordered_ids = request.data.get('ordered_ids', [])
+        
+        if not ordered_ids:
+            return Response({'error': 'No ordered_ids provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 验证所有知识库存在
+        knowledge_bases = KnowledgeBase.objects.filter(id__in=ordered_ids)
+        
+        if len(knowledge_bases) != len(ordered_ids):
+            return Response({'error': 'Some knowledge bases not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 批量更新排序
+        for index, kb_id in enumerate(ordered_ids):
+            KnowledgeBase.objects.filter(id=kb_id).update(order=index)
+        
+        return Response({'success': True})
+
+
+class ReorderDirectoriesView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, knowledge_base_id):
+        ordered_ids = request.data.get('ordered_ids', [])
+        
+        if not ordered_ids:
+            return Response({'error': 'No ordered_ids provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 验证所有目录都属于同一个知识库
+        directories = Directory.objects.filter(id__in=ordered_ids, knowledge_base_id=knowledge_base_id)
+        
+        if len(directories) != len(ordered_ids):
+            return Response({'error': 'Some directories not found or not in this knowledge base'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 批量更新排序
+        for index, dir_id in enumerate(ordered_ids):
+            Directory.objects.filter(id=dir_id).update(order=index)
+        
+        return Response({'success': True})
+
+
+class ReorderFoldersView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        ordered_ids = request.data.get('ordered_ids', [])
+        parent_id = request.data.get('parent_id')
+        directory_id = request.data.get('directory_id')
+        
+        if not ordered_ids:
+            return Response({'error': 'No ordered_ids provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 构建查询条件
+        query = Folder.objects.filter(id__in=ordered_ids)
+        if parent_id:
+            query = query.filter(parent_id=parent_id)
+        elif directory_id:
+            query = query.filter(directory_id=directory_id, parent__isnull=True)
+        
+        folders = query
+        
+        if len(folders) != len(ordered_ids):
+            return Response({'error': 'Some folders not found or not in the specified location'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 批量更新排序
+        for index, folder_id in enumerate(ordered_ids):
+            Folder.objects.filter(id=folder_id).update(order=index)
+        
+        return Response({'success': True})
+
+
+class ReorderDocumentsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        ordered_ids = request.data.get('ordered_ids', [])
+        folder_id = request.data.get('folder_id')
+        directory_id = request.data.get('directory_id')
+        
+        if not ordered_ids:
+            return Response({'error': 'No ordered_ids provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 构建查询条件
+        query = Document.objects.filter(id__in=ordered_ids)
+        if folder_id:
+            query = query.filter(folder_id=folder_id)
+        elif directory_id:
+            query = query.filter(directory_id=directory_id, folder__isnull=True)
+        
+        documents = query
+        
+        if len(documents) != len(ordered_ids):
+            return Response({'error': 'Some documents not found or not in the specified location'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 批量更新排序
+        for index, doc_id in enumerate(ordered_ids):
+            Document.objects.filter(id=doc_id).update(order=index)
+        
+        return Response({'success': True})
+

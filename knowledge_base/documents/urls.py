@@ -35,7 +35,11 @@ from .views import (
     ChatSessionDetailView,
     ChatSendMessageView,
     ZipUploadView,
-    ZipImportView
+    ZipImportView,
+    ReorderKnowledgeBasesView,
+    ReorderDirectoriesView,
+    ReorderFoldersView,
+    ReorderDocumentsView
 )
 
 urlpatterns = [
@@ -65,6 +69,12 @@ urlpatterns = [
     path('documents/bm25-search/', BM25SearchView.as_view(), name='bm25-search'),
     path('documents/vector-search-new/', VectorSearchAPIView.as_view(), name='vector-search-new'),
     path('documents/hybrid-search/', HybridSearchView.as_view(), name='hybrid-search'),
+    
+    # 排序相关
+    path('knowledge-bases/reorder/', ReorderKnowledgeBasesView.as_view(), name='reorder-knowledge-bases'),
+    path('knowledge-bases/<int:knowledge_base_id>/reorder-directories/', ReorderDirectoriesView.as_view(), name='reorder-directories'),
+    path('folders/reorder/', ReorderFoldersView.as_view(), name='reorder-folders'),
+    path('documents/reorder/', ReorderDocumentsView.as_view(), name='reorder-documents'),
     
     path('permissions/', PermissionListView.as_view(), name='permission-list'),
     path('permissions/<int:pk>/', PermissionDetailView.as_view(), name='permission-detail'),

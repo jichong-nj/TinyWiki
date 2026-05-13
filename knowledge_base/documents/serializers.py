@@ -11,13 +11,13 @@ class KnowledgeBaseSerializer(serializers.ModelSerializer):
 class DirectorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Directory
-        fields = ['id', 'knowledge_base', 'name', 'description', 'created_at', 'updated_at']
+        fields = ['id', 'knowledge_base', 'name', 'description', 'order', 'created_at', 'updated_at']
 
 
 class FolderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Folder
-        fields = ['id', 'directory', 'parent', 'name', 'created_at', 'updated_at']
+        fields = ['id', 'directory', 'parent', 'name', 'order', 'created_at', 'updated_at']
 
 
 class DocumentVersionSerializer(serializers.ModelSerializer):
@@ -36,7 +36,7 @@ class DocumentSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Document
-        fields = ['id', 'directory', 'folder', 'title', 'filename', 'content', 'publish_status', 'analysis_status', 'created_at', 'updated_at', 'current_version']
+        fields = ['id', 'directory', 'folder', 'title', 'filename', 'content', 'order', 'publish_status', 'analysis_status', 'created_at', 'updated_at', 'current_version']
     
     def get_current_version(self, obj):
         return obj.get_current_version()

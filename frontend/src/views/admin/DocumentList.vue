@@ -19,27 +19,38 @@
     <div class="list-content">
       <div class="directory-tree">
         <div class="tree-content">
-          <div 
-            v-for="dir in directories" 
-            :key="dir.id" 
-            class="tree-item"
-            :class="{ active: selectedDirectory === dir.id }"
-            @click="selectDirectory(dir.id)"
+          <draggable
+            v-model="directories"
+            item-key="id"
+            @end="handleDirectoryReorder"
+            handle=".drag-handle"
+            class="draggable-list"
           >
-            <el-icon class="dir-icon"><FolderOpened /></el-icon>
-            <span class="dir-name">{{ dir.name }}</span>
-            <el-dropdown trigger="click" @click.stop>
-              <el-button type="text" class="item-menu-btn">
-                <el-icon class="icon"><MoreFilled /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item @click="editDirectory(dir)">修改</el-dropdown-item>
-                  <el-dropdown-item @click="deleteDirectory(dir.id)">删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+            <template #item="{ element: dir }">
+              <div 
+                class="tree-item"
+                :class="{ active: selectedDirectory === dir.id }"
+                @click="selectDirectory(dir.id)"
+              >
+                <div class="drag-handle">
+                  <el-icon><MoreFilled /></el-icon>
+                </div>
+                <el-icon class="dir-icon"><FolderOpened /></el-icon>
+                <span class="dir-name">{{ dir.name }}</span>
+                <el-dropdown trigger="click" @click.stop>
+                  <el-button type="text" class="item-menu-btn">
+                    <el-icon class="icon"><MoreFilled /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item @click="editDirectory(dir)">修改</el-dropdown-item>
+                      <el-dropdown-item @click="deleteDirectory(dir.id)">删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </template>
+          </draggable>
           
           <div class="add-dir-item">
             <el-button type="text" class="add-dir-btn" @click="showAddDialog = true">
@@ -80,75 +91,97 @@
         </div>
         
         <div class="document-items">
-          <div 
-            v-for="folder in folders" 
-            :key="folder.id" 
-            class="document-item folder-item"
-            @click="drillIntoFolder(folder)"
+          <draggable
+            v-model="folders"
+            item-key="id"
+            @end="handleFolderReorder"
+            handle=".drag-handle"
+            class="draggable-list"
           >
-            <div class="item-left">
-              <el-icon class="folder-icon"><FolderOpened /></el-icon>
-              <span class="doc-name">{{ folder.name }}</span>
-              <el-icon class="arrow-icon"><ArrowRight /></el-icon>
-            </div>
-            
-            <div class="item-center">
-            </div>
-            
-            <div class="item-right">
-              <span class="update-time">{{ formatDateTime(folder.updated_at) }}</span>
-              <el-dropdown trigger="click" @click.stop>
-                <el-button type="text" class="menu-btn" @click.stop>
-                  <el-icon><MoreFilled /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="editFolder(folder)">修改</el-dropdown-item>
-                    <el-dropdown-item @click="openMoveFolderDialog(folder)">移动</el-dropdown-item>
-                    <el-dropdown-item @click="deleteFolder(folder.id)">删除</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </div>
-          
-          <div 
-            v-for="doc in documents" 
-            :key="doc.id" 
-            class="document-item"
-            @click="editDocument(doc.id)"
-          >
-            <div class="item-left">
-              <el-icon class="doc-icon"><Document /></el-icon>
-              <span class="doc-name">{{ doc.filename }}</span>
-            </div>
-            
-            <div class="item-right">
-              <div class="status-tags">
-                <el-tag :type="getPublishTagType(doc.publish_status)" size="small">
-                  {{ getPublishStatusText(doc.publish_status) }}
-                </el-tag>
-                <el-tag :type="getAnalysisTagType(doc.analysis_status)" size="small">
-                  {{ getAnalysisStatusText(doc.analysis_status) }}
-                </el-tag>
+            <template #item="{ element: folder }">
+              <div 
+                class="document-item folder-item"
+                @click="drillIntoFolder(folder)"
+              >
+                <div class="item-left">
+                  <div class="drag-handle">
+                    <el-icon><MoreFilled /></el-icon>
+                  </div>
+                  <el-icon class="folder-icon"><FolderOpened /></el-icon>
+                  <span class="doc-name">{{ folder.name }}</span>
+                  <el-icon class="arrow-icon"><ArrowRight /></el-icon>
+                </div>
+                
+                <div class="item-center">
+                </div>
+                
+                <div class="item-right">
+                  <span class="update-time">{{ formatDateTime(folder.updated_at) }}</span>
+                  <el-dropdown trigger="click" @click.stop>
+                    <el-button type="text" class="menu-btn" @click.stop>
+                      <el-icon><MoreFilled /></el-icon>
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item @click="editFolder(folder)">修改</el-dropdown-item>
+                        <el-dropdown-item @click="openMoveFolderDialog(folder)">移动</el-dropdown-item>
+                        <el-dropdown-item @click="deleteFolder(folder.id)">删除</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
               </div>
-              <span class="update-time">{{ formatDateTime(doc.updated_at) }}</span>
-              <el-dropdown trigger="click" @click.stop>
-                <el-button type="text" class="menu-btn" @click.stop>
-                  <el-icon><MoreFilled /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="editDocument(doc.id)">编辑</el-dropdown-item>
-                    <el-dropdown-item @click="openMoveDocumentDialog(doc)">移动</el-dropdown-item>
-                    <el-dropdown-item @click="deleteDocument(doc.id)">删除</el-dropdown-item>
-                    <el-dropdown-item v-if="doc.publish_status === 'draft'" @click="queuePublishDocument(doc.id)">加入发布队列</el-dropdown-item>
-                    <el-dropdown-item v-if="doc.publish_status === 'published' && doc.analysis_status !== 'completed'" @click="queueAnalyzeDocument(doc.id)">加入分析队列</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </div>
+            </template>
+          </draggable>
+          
+          <draggable
+            v-model="documents"
+            item-key="id"
+            @end="handleDocumentReorder"
+            handle=".drag-handle"
+            class="draggable-list"
+          >
+            <template #item="{ element: doc }">
+              <div 
+                class="document-item"
+                @click="editDocument(doc.id)"
+              >
+                <div class="item-left">
+                  <div class="drag-handle">
+                    <el-icon><MoreFilled /></el-icon>
+                  </div>
+                  <el-icon class="doc-icon"><Document /></el-icon>
+                  <span class="doc-name">{{ doc.filename }}</span>
+                </div>
+                
+                <div class="item-right">
+                  <div class="status-tags">
+                    <el-tag :type="getPublishTagType(doc.publish_status)" size="small">
+                      {{ getPublishStatusText(doc.publish_status) }}
+                    </el-tag>
+                    <el-tag :type="getAnalysisTagType(doc.analysis_status)" size="small">
+                      {{ getAnalysisStatusText(doc.analysis_status) }}
+                    </el-tag>
+                  </div>
+                  <span class="update-time">{{ formatDateTime(doc.updated_at) }}</span>
+                  <el-dropdown trigger="click" @click.stop>
+                    <el-button type="text" class="menu-btn" @click.stop>
+                      <el-icon><MoreFilled /></el-icon>
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item @click="editDocument(doc.id)">编辑</el-dropdown-item>
+                        <el-dropdown-item @click="openMoveDocumentDialog(doc)">移动</el-dropdown-item>
+                        <el-dropdown-item @click="deleteDocument(doc.id)">删除</el-dropdown-item>
+                        <el-dropdown-item v-if="doc.publish_status === 'draft'" @click="queuePublishDocument(doc.id)">加入发布队列</el-dropdown-item>
+                        <el-dropdown-item v-if="doc.publish_status === 'published' && doc.analysis_status !== 'completed'" @click="queueAnalyzeDocument(doc.id)">加入分析队列</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
+              </div>
+            </template>
+          </draggable>
         </div>
       </div>
     </div>
@@ -430,11 +463,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, defineComponent, h, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from '../../axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose, Upload, Folder } from '@element-plus/icons-vue'
+import draggable from 'vuedraggable'
 
 // 树节点组件
 const TreeNode = defineComponent({
@@ -1238,6 +1272,73 @@ async function bulkPublishSelected() {
         loadStats()
         loadDocuments()
     }
+}
+
+// 拖拽排序相关函数
+let isDragging = false
+
+async function handleDirectoryReorder(event: any) {
+  if (isDragging || !currentKnowledgeBase.value) return
+  isDragging = true
+  
+  const orderedIds = directories.value.map(d => d.id)
+  
+  try {
+    await axios.post(`/documents/knowledge-bases/${currentKnowledgeBase.value}/reorder-directories/`, {
+      ordered_ids: orderedIds
+    })
+  } catch (error: any) {
+    console.error('目录排序失败:', error)
+    ElMessage.error('目录排序失败')
+  } finally {
+    isDragging = false
+  }
+}
+
+async function handleFolderReorder(event: any) {
+  if (isDragging) return
+  isDragging = true
+  
+  const orderedIds = folders.value.map(f => f.id)
+  const requestData: any = { ordered_ids: orderedIds }
+  
+  if (selectedFolder.value) {
+    requestData.parent_id = selectedFolder.value
+  } else if (selectedDirectory.value) {
+    requestData.directory_id = selectedDirectory.value
+  }
+  
+  try {
+    await axios.post('/documents/folders/reorder/', requestData)
+  } catch (error: any) {
+    console.error('文件夹排序失败:', error)
+    ElMessage.error('文件夹排序失败')
+  } finally {
+    isDragging = false
+  }
+}
+
+async function handleDocumentReorder(event: any) {
+  if (isDragging) return
+  isDragging = true
+  
+  const orderedIds = documents.value.map(d => d.id)
+  const requestData: any = { ordered_ids: orderedIds }
+  
+  if (selectedFolder.value) {
+    requestData.folder_id = selectedFolder.value
+  } else if (selectedDirectory.value) {
+    requestData.directory_id = selectedDirectory.value
+  }
+  
+  try {
+    await axios.post('/documents/documents/reorder/', requestData)
+  } catch (error: any) {
+    console.error('文档排序失败:', error)
+    ElMessage.error('文档排序失败')
+  } finally {
+    isDragging = false
+  }
 }
 
 // 移动相关函数
@@ -2169,5 +2270,42 @@ onUnmounted(() => {
   color: #909399;
   flex-shrink: 0;
   margin-left: 16px;
+}
+
+/* 拖拽排序相关样式 */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  padding: 4px;
+  color: #999;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  margin-right: 4px;
+}
+
+.drag-handle:hover {
+  color: #666;
+}
+
+.tree-item:hover .drag-handle,
+.document-item:hover .drag-handle {
+  opacity: 1;
+}
+
+.draggable-list {
+  min-height: 40px;
+}
+
+.sortable-ghost {
+  opacity: 0.5;
+  background: #f0f0f0;
+  border: 2px dashed #ddd;
+}
+
+.sortable-chosen {
+  background: #e8f4fd !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 </style>

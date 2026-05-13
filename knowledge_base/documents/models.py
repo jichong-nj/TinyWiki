@@ -8,8 +8,12 @@ from pgvector.django import VectorField
 class KnowledgeBase(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
+    order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['order', 'id']
     
     def __str__(self):
         return self.name
@@ -23,8 +27,12 @@ class Directory(models.Model):
     )
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
+    order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['order', 'id']
     
     def __str__(self):
         return f"{self.knowledge_base.name} / {self.name}"
@@ -46,13 +54,12 @@ class Folder(models.Model):
         null=True
     )
     name = models.CharField(max_length=200)
+    order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    def __str__(self):
-        return self.name
-    
     class Meta:
+        ordering = ['order', 'id']
         constraints = [
             # 顶级文件夹（在 directory 下）：directory 和 name 必须唯一
             models.UniqueConstraint(
@@ -67,6 +74,9 @@ class Folder(models.Model):
                 condition=models.Q(parent__isnull=False)
             )
         ]
+    
+    def __str__(self):
+        return self.name
 
 
 class Document(models.Model):
@@ -88,6 +98,7 @@ class Document(models.Model):
     filename = models.CharField(max_length=200)
     content = models.TextField(blank=True, null=True)
     search_vector = SearchVectorField(null=True, blank=True)
+    order = models.IntegerField(default=0)
     publish_status = models.CharField(
         max_length=20,
         choices=[
@@ -108,14 +119,8 @@ class Document(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    def __str__(self):
-        return self.title
-    
-    def get_current_version(self):
-        latest_version = self.versions.order_by('-version_number').first()
-        return latest_version.version_number if latest_version else 1
-    
     class Meta:
+        ordering = ['order', 'id']
         constraints = [
             # 顶级文档（在 directory 下）：directory 和 filename 必须唯一
             models.UniqueConstraint(
@@ -130,6 +135,9 @@ class Document(models.Model):
                 condition=models.Q(folder__isnull=False)
             )
         ]
+    
+    def __str__(self):
+        return self.title
 
 
 class DocumentVersion(models.Model):

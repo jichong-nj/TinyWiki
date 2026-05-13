@@ -4,27 +4,34 @@
       <el-button type="primary" @click="showCreateModal = true">创建知识库</el-button>
     </div>
     
-    <el-table :data="knowledgeBases" border>
-      <el-table-column prop="name" label="名称" />
-      <el-table-column prop="description" label="描述" />
-      <el-table-column label="创建时间">
-        <template #default="scope">
-          {{ formatDateTime(scope.row.created_at) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="更新时间">
-        <template #default="scope">
-          {{ formatDateTime(scope.row.updated_at) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作">
-        <template #default="scope">
-          <el-button text @click="viewDirectories(scope.row.id)">管理目录</el-button>
-          <el-button text @click="editKnowledgeBase(scope.row)">编辑</el-button>
-          <el-button text type="danger" @click="deleteKnowledgeBase(scope.row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <draggable 
+      v-model="knowledgeBases" 
+      item-key="id" 
+      @end="handleKnowledgeBasesReorder"
+      handle=".drag-handle"
+      class="kb-list"
+    >
+      <template #item="{ element }">
+        <div class="kb-item">
+          <div class="drag-handle">
+            <el-icon><MoreFilled /></el-icon>
+          </div>
+          <div class="kb-info">
+            <div class="kb-name">{{ element.name }}</div>
+            <div class="kb-desc">{{ element.description }}</div>
+          </div>
+          <div class="kb-meta">
+            <span class="kb-time">创建: {{ formatDateTime(element.created_at) }}</span>
+            <span class="kb-time">更新: {{ formatDateTime(element.updated_at) }}</span>
+          </div>
+          <div class="kb-actions">
+            <el-button text @click="viewDirectories(element.id)">管理目录</el-button>
+            <el-button text @click="editKnowledgeBase(element)">编辑</el-button>
+            <el-button text type="danger" @click="deleteKnowledgeBase(element.id)">删除</el-button>
+          </div>
+        </div>
+      </template>
+    </draggable>
     
     <el-dialog v-model="showCreateModal" :title="isEditing ? '编辑知识库' : '创建知识库'" width="400px">
       <el-form :model="form" label-width="80px" @submit.prevent="saveKnowledgeBase">
@@ -77,6 +84,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import axios from '../../axios'
+import { MoreFilled } from '@element-plus/icons-vue'
+import draggable from 'vuedraggable'
 
 interface KnowledgeBase {
   id: number
@@ -100,6 +109,7 @@ const isEditing = ref(false)
 const editingId = ref<number | null>(null)
 const currentKBId = ref<number | null>(null)
 const directories = ref<Directory[]>([])
+let isDragging = false
 
 const form = reactive({
   name: '',
@@ -117,6 +127,23 @@ function loadKnowledgeBases() {
       knowledgeBases.value = response.data
     })
     .catch(error => console.error('加载知识库失败:', error))
+}
+
+async function handleKnowledgeBasesReorder() {
+  if (isDragging) return
+  isDragging = true
+  
+  const orderedIds = knowledgeBases.value.map(kb => kb.id)
+  
+  try {
+    await axios.post('/documents/knowledge-bases/reorder/', {
+      ordered_ids: orderedIds
+    })
+  } catch (error: any) {
+    console.error('知识库排序失败:', error)
+  } finally {
+    isDragging = false
+  }
 }
 
 function saveKnowledgeBase() {
@@ -230,6 +257,82 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.kb-list {
+  min-height: 100px;
+}
+
+.kb-item {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s;
+}
+
+.kb-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  padding: 4px;
+  color: #999;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  margin-right: 12px;
+}
+
+.kb-item:hover .drag-handle {
+  opacity: 1;
+}
+
+.drag-handle:hover {
+  color: #666;
+}
+
+.kb-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.kb-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.kb-desc {
+  font-size: 14px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-right: 20px;
+}
+
+.kb-time {
+  font-size: 12px;
+  color: #999;
+}
+
+.kb-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .directory-management {
   display: flex;
   gap: 20px;
@@ -241,5 +344,13 @@ onMounted(() => {
 
 .directory-form {
   width: 280px;
+}
+
+.sortable-chosen {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.sortable-ghost {
+  opacity: 0.5;
 }
 </style>
