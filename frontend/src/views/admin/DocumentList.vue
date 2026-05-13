@@ -463,19 +463,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch, defineComponent, h, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from '../../axios'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { MoreFilled, FolderOpened, Plus, Document, ArrowRight, Files, Loading, CircleCheck, CircleClose, Upload, Folder } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 
+// 树节点类型
+interface TreeNodeData {
+  id: number
+  name: string
+  type: 'directory' | 'folder' | 'document'
+  children?: TreeNodeData[]
+}
+
 // 树节点组件
-const TreeNode = defineComponent({
+const TreeNode: any = defineComponent({
   name: 'TreeNode',
   props: {
     nodes: {
-      type: Array,
+      type: Array as () => TreeNodeData[],
       required: true
     },
     selectedId: {
@@ -491,38 +499,40 @@ const TreeNode = defineComponent({
   setup(props, { emit }) {
     const expanded = ref(true);
     
-    return () => h('div', {}, 
-      props.nodes.map(node => {
-        if (props.excludedId && node.id === props.excludedId) {
-          return null; // 排除不能选择的节点
-        }
-        
-        return h('div', { key: node.id, class: 'tree-item' }, [
-          h('div', {
-            class: ['tree-node', { active: props.selectedId === node.id }],
-            onClick: () => emit('select', node)
-          }, [
-            h('div', { class: 'node-content' }, [
-              node.type === 'folder' && h(Folder, { class: 'node-icon' }),
-              h('span', { class: 'node-name' }, node.name)
+    return () => {
+      return h('div', {}, 
+        props.nodes.map((node: TreeNodeData) => {
+          if (props.excludedId && node.id === props.excludedId) {
+            return null; // 排除不能选择的节点
+          }
+          
+          return h('div', { key: node.id, class: 'tree-item' }, [
+            h('div', {
+              class: ['tree-node', { active: props.selectedId === node.id }],
+              onClick: () => emit('select', node)
+            }, [
+              h('div', { class: 'node-content' }, [
+                node.type === 'folder' && h(Folder, { class: 'node-icon' }),
+                h('span', { class: 'node-name' }, node.name)
+              ]),
+              node.children && node.children.length > 0 && h(ArrowRight, {
+                class: ['expand-icon', { rotated: expanded.value }],
+                onClick: (e: MouseEvent) => {
+                  e.stopPropagation();
+                  expanded.value = !expanded.value;
+                }
+              })
             ]),
-            node.children && node.children.length > 0 && h(ArrowRight, {
-              class: ['expand-icon', { rotated: expanded.value }],
-              onClick: (e) => {
-                e.stopPropagation();
-                expanded.value = !expanded.value;
-              }
+            node.children && node.children.length > 0 && expanded.value && h(TreeNode, {
+              nodes: node.children,
+              selectedId: props.selectedId,
+              excludedId: props.excludedId,
+              onSelect: (selectedNode: TreeNodeData) => emit('select', selectedNode)
             })
-          ]),
-          node.children && node.children.length > 0 && expanded.value && h(TreeNode, {
-            nodes: node.children,
-            selectedId: props.selectedId,
-            excludedId: props.excludedId,
-            onSelect: (selectedNode) => emit('select', selectedNode)
-          })
-        ]);
-      })
-    );
+          ]);
+        })
+      );
+    };
   }
 });
 
@@ -1277,7 +1287,7 @@ async function bulkPublishSelected() {
 // 拖拽排序相关函数
 let isDragging = false
 
-async function handleDirectoryReorder(event: any) {
+async function handleDirectoryReorder() {
   if (isDragging || !currentKnowledgeBase.value) return
   isDragging = true
   
@@ -1295,7 +1305,7 @@ async function handleDirectoryReorder(event: any) {
   }
 }
 
-async function handleFolderReorder(event: any) {
+async function handleFolderReorder() {
   if (isDragging) return
   isDragging = true
   
@@ -1318,7 +1328,7 @@ async function handleFolderReorder(event: any) {
   }
 }
 
-async function handleDocumentReorder(event: any) {
+async function handleDocumentReorder() {
   if (isDragging) return
   isDragging = true
   
@@ -1564,7 +1574,7 @@ async function startZipImport() {
     
     console.log('导入响应:', response.data)
     
-    const { success_count, total_count, results } = response.data
+    const { success_count, total_count } = response.data
     
     // 只显示数量，不显示所有文件名
     ElMessage.success(`成功导入 ${success_count}/${total_count} 个文件`)
