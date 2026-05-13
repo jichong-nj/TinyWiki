@@ -1,12 +1,13 @@
 from rest_framework import serializers
-from .models import CustomUser
+from .models import CustomUser, UserPermission
+from documents.models import KnowledgeBase, Directory
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['id', 'email', 'username', 'avatar', 'bio', 'role', 'date_joined']
-        read_only_fields = ['id', 'date_joined']
+        fields = ['id', 'email', 'username', 'avatar', 'bio', 'role', 'date_joined', 'is_superuser']
+        read_only_fields = ['id', 'date_joined', 'is_superuser']
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -37,3 +38,34 @@ class UserCreateSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(required=True)
     password = serializers.CharField(required=True, write_only=True)
+
+
+class UserPermissionSerializer(serializers.ModelSerializer):
+    knowledge_base_name = serializers.CharField(source='knowledge_base.name', read_only=True)
+    directory_name = serializers.CharField(source='directory.name', read_only=True)
+    
+    class Meta:
+        model = UserPermission
+        fields = ['id', 'user', 'knowledge_base', 'knowledge_base_name', 'directory', 'directory_name']
+
+
+class UserWithPermissionsSerializer(serializers.ModelSerializer):
+    permissions = UserPermissionSerializer(source='assigned_permissions', many=True, read_only=True)
+    
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'email', 'username', 'avatar', 'bio', 'role', 'date_joined', 'permissions']
+        read_only_fields = ['id', 'date_joined']
+
+
+class UpdateUserPermissionsSerializer(serializers.Serializer):
+    knowledge_base_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list
+    )
+    directory_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list
+    )

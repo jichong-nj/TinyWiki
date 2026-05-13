@@ -13,6 +13,10 @@
           <el-icon><FolderOpened /></el-icon>
           <span>知识库</span>
         </el-menu-item>
+        <el-menu-item index="/permissions">
+          <el-icon><Lock /></el-icon>
+          <span>权限管理</span>
+        </el-menu-item>
         <el-menu-item index="/settings">
           <el-icon><Setting /></el-icon>
           <span>大模型配置</span>
@@ -61,7 +65,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import axios from '../../axios'
-import { Document, FolderOpened, Setting, CaretBottom } from '@element-plus/icons-vue'
+import { Document, FolderOpened, Setting, CaretBottom, Lock } from '@element-plus/icons-vue'
 
 interface KnowledgeBase {
   id: number
