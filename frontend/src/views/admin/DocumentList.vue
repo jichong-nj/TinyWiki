@@ -12,7 +12,7 @@
         </el-breadcrumb>
       </div>
       <div class="stats-section">
-        <span class="stats-text">未发布{{ draftCount }}条，待分析{{ pendingAnalysisCount }}条</span>
+        <span class="stats-text">未发布{{ publishingCount }}/{{ draftCount }}条，待分析{{ analyzingCount }}/{{ pendingAnalysisCount }}条</span>
       </div>
     </div>
     
@@ -427,11 +427,20 @@ const uploadData = computed(() => ({
 }))
 
 const draftCount = ref(0)
+const publishingCount = ref(0)
 const pendingAnalysisCount = ref(0)
+const analyzingCount = ref(0)
+let statsTimer: number | null = null
 
 function updateStats() {
   draftCount.value = documents.value.filter(doc => doc.publish_status === 'draft').length
-  pendingAnalysisCount.value = documents.value.filter(doc => doc.analysis_status !== 'completed').length
+  publishingCount.value = documents.value.filter(doc => doc.publish_status === 'pending').length
+  pendingAnalysisCount.value = documents.value.filter(doc => 
+    doc.publish_status === 'published' && doc.analysis_status === 'pending'
+  ).length
+  analyzingCount.value = documents.value.filter(doc => 
+    doc.publish_status === 'published' && doc.analysis_status === 'analyzing'
+  ).length
 }
 
 function loadStats() {
@@ -442,7 +451,9 @@ function loadStats() {
   axios.get('/documents/documents/stats/', { params })
     .then(response => {
       draftCount.value = response.data.draft_count
+      publishingCount.value = response.data.publishing_count
       pendingAnalysisCount.value = response.data.pending_analysis_count
+      analyzingCount.value = response.data.analyzing_count
     })
     .catch(error => console.error('加载统计数据失败:', error))
 }
@@ -1106,11 +1117,23 @@ onMounted(() => {
   loadKnowledgeBases()
   // 监听来自AdminLayout的知识库切换事件
   window.addEventListener('knowledgeBaseChanged', handleAdminLayoutKnowledgeBaseChange as EventListener)
+  
+  // 每10秒刷新一次统计数据
+  statsTimer = window.setInterval(() => {
+    if (currentKnowledgeBase.value) {
+      loadStats()
+    }
+  }, 10000)
 })
 
 onUnmounted(() => {
   // 清理事件监听器
   window.removeEventListener('knowledgeBaseChanged', handleAdminLayoutKnowledgeBaseChange as EventListener)
+  // 清理定时器
+  if (statsTimer) {
+    clearInterval(statsTimer)
+    statsTimer = null
+  }
 })
 </script>
 

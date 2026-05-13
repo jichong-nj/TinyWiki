@@ -51,6 +51,22 @@ class Folder(models.Model):
     
     def __str__(self):
         return self.name
+    
+    class Meta:
+        constraints = [
+            # 顶级文件夹（在 directory 下）：directory 和 name 必须唯一
+            models.UniqueConstraint(
+                fields=['directory', 'name'],
+                name='unique_directory_name',
+                condition=models.Q(parent__isnull=True)
+            ),
+            # 子文件夹（在 parent 下）：parent 和 name 必须唯一
+            models.UniqueConstraint(
+                fields=['parent', 'name'],
+                name='unique_parent_name',
+                condition=models.Q(parent__isnull=False)
+            )
+        ]
 
 
 class Document(models.Model):
@@ -98,6 +114,22 @@ class Document(models.Model):
     def get_current_version(self):
         latest_version = self.versions.order_by('-version_number').first()
         return latest_version.version_number if latest_version else 1
+    
+    class Meta:
+        constraints = [
+            # 顶级文档（在 directory 下）：directory 和 filename 必须唯一
+            models.UniqueConstraint(
+                fields=['directory', 'filename'],
+                name='unique_directory_filename',
+                condition=models.Q(folder__isnull=True)
+            ),
+            # 文档在 folder 下：folder 和 filename 必须唯一
+            models.UniqueConstraint(
+                fields=['folder', 'filename'],
+                name='unique_folder_filename',
+                condition=models.Q(folder__isnull=False)
+            )
+        ]
 
 
 class DocumentVersion(models.Model):

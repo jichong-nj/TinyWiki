@@ -403,11 +403,16 @@ class DocumentStatsView(APIView):
             queryset = queryset.filter(directory__knowledge_base_id=knowledge_base_id)
         
         draft_count = queryset.filter(publish_status='draft').count()
-        pending_analysis_count = queryset.filter(publish_status='published', analysis_status__in=['pending', 'analyzing']).count()
+        publishing_count = queryset.filter(publish_status='pending').count()
+        
+        pending_analysis_count = queryset.filter(publish_status='published', analysis_status='pending').count()
+        analyzing_count = queryset.filter(publish_status='published', analysis_status='analyzing').count()
         
         return Response({
             'draft_count': draft_count,
-            'pending_analysis_count': pending_analysis_count
+            'publishing_count': publishing_count,
+            'pending_analysis_count': pending_analysis_count,
+            'analyzing_count': analyzing_count
         })
 
 
