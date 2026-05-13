@@ -866,11 +866,49 @@ function loadDirectories() {
         }
         loadDocuments()
         loadFolders()
+        // 加载完整文件夹路径，用于重建面包屑
+        if (selectedFolder.value) {
+          loadFullFolderPath()
+        }
       }
     })
     .catch(error => {
       console.error('加载目录失败:', error)
     })
+}
+
+function loadFullFolderPath() {
+  if (!selectedDirectory.value) return
+  
+  // 加载当前目录下的所有文件夹
+  axios.get('/documents/folders/', { params: { directory: selectedDirectory.value } })
+    .then(response => {
+      const allFolders = response.data
+      // 构建从当前文件夹到根的完整路径
+      buildBreadcrumbPath(allFolders)
+    })
+    .catch(error => {
+      console.error('加载文件夹路径失败:', error)
+    })
+}
+
+function buildBreadcrumbPath(allFolders: Folder[]) {
+  if (!selectedFolder.value) return
+  
+  const path: Folder[] = []
+  let currentId: number | null = selectedFolder.value
+  
+  while (currentId) {
+    const folder = allFolders.find(f => f.id === currentId)
+    if (folder) {
+      path.unshift(folder)
+      currentId = folder.parent
+    } else {
+      break
+    }
+  }
+  
+  breadcrumbFolders.value = path
 }
 
 function selectDirectory(id: number) {
