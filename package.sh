@@ -5,6 +5,12 @@ echo "========================================="
 echo " TinyWiki 部署打包脚本"
 echo "========================================="
 
+echo "正在构建前端..."
+cd frontend
+npm run build
+cd ..
+echo "前端构建完成！"
+
 tar -zcvf tinywiki-src.tar.gz knowledge_base/ frontend/ nginx.conf docker-compose.yml postgres/ requirements.txt
 echo "源代码已打包到 tinywiki-src.tar.gz"
 
