@@ -534,9 +534,14 @@ const folders = ref<Folder[]>([])
 const selectedDirectory = ref<number | null>(null)
 const selectedFolder = ref<number | null>(null)
 const breadcrumbFolders = ref<Folder[]>([])
+// 暂存从query获取的kb_id，等待knowledgeBases加载后设置
+const pendingKnowledgeBaseId = ref<number | null>(null)
 
 // Initialize state from route query parameters
 function initStateFromQuery() {
+  if (route.query.kb) {
+    pendingKnowledgeBaseId.value = Number(route.query.kb)
+  }
   if (route.query.directory) {
     selectedDirectory.value = Number(route.query.directory)
   }
@@ -648,7 +653,17 @@ function loadKnowledgeBases() {
       console.log('Knowledge bases loaded:', response.data)
       knowledgeBases.value = response.data
       if (knowledgeBases.value.length > 0) {
-        if (currentKnowledgeBase.value === null) {
+        // 优先检查是否有待设置的 pendingKnowledgeBaseId
+        if (pendingKnowledgeBaseId.value !== null && 
+            knowledgeBases.value.some(kb => kb.id === pendingKnowledgeBaseId.value)) {
+          console.log('Setting knowledge base from query:', pendingKnowledgeBaseId.value)
+          currentKnowledgeBase.value = pendingKnowledgeBaseId.value
+          pendingKnowledgeBaseId.value = null
+          // 通知AdminLayout更新
+          window.dispatchEvent(new CustomEvent('documentListKnowledgeBaseChanged', { 
+            detail: { knowledgeBaseId: currentKnowledgeBase.value } 
+          }))
+        } else if (currentKnowledgeBase.value === null) {
           console.log('Setting default knowledge base:', knowledgeBases.value[0].id)
           currentKnowledgeBase.value = knowledgeBases.value[0].id
         }
@@ -1078,6 +1093,9 @@ function deleteFolder(id: number) {
 
 function createDocument() {
   const query: any = {}
+  if (currentKnowledgeBase.value) {
+    query.kb = currentKnowledgeBase.value
+  }
   if (selectedDirectory.value) {
     query.directory = selectedDirectory.value
   }
@@ -1090,6 +1108,9 @@ function createDocument() {
 function editDocument(id: number) {
   const doc = documents.value.find(d => d.id === id)
   const query: any = {}
+  if (currentKnowledgeBase.value) {
+    query.kb = currentKnowledgeBase.value
+  }
   if (doc?.directory) {
     query.directory = doc.directory
   }

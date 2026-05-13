@@ -92,8 +92,24 @@ function loadKnowledgeBases() {
   axios.get('/documents/knowledge-bases/')
     .then(response => {
       knowledgeBases.value = response.data
-      if (knowledgeBases.value.length > 0 && currentKnowledgeBase.value === null) {
-        currentKnowledgeBase.value = knowledgeBases.value[0].id
+      if (knowledgeBases.value.length > 0) {
+        // 优先检查路由query中是否有kb参数
+        if (route.query.kb) {
+          const kbFromQuery = Number(route.query.kb)
+          const validKb = knowledgeBases.value.find(kb => kb.id === kbFromQuery)
+          if (validKb) {
+            console.log('AdminLayout: 从query设置知识库:', kbFromQuery)
+            currentKnowledgeBase.value = kbFromQuery
+            // 立即通知DocumentList
+            window.dispatchEvent(new CustomEvent('knowledgeBaseChanged', { 
+              detail: { knowledgeBaseId: currentKnowledgeBase.value } 
+            }))
+          } else if (currentKnowledgeBase.value === null) {
+            currentKnowledgeBase.value = knowledgeBases.value[0].id
+          }
+        } else if (currentKnowledgeBase.value === null) {
+          currentKnowledgeBase.value = knowledgeBases.value[0].id
+        }
       }
     })
     .catch(error => console.error('加载知识库失败:', error))

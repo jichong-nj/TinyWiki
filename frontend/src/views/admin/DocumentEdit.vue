@@ -54,11 +54,19 @@ const form = reactive({
   title: '',
   content: '',
   directory: null as number | null,
-  folder: null as number | null
+  folder: null as number | null,
+  knowledgeBase: null as number | null
 })
 
 function goBack() {
   const query: any = {}
+  
+  // 优先传递 knowledge_base
+  if (form.knowledgeBase) {
+    query.kb = form.knowledgeBase
+  } else if (route.query.kb) {
+    query.kb = route.query.kb
+  }
   
   // 优先从表单获取目录和文件夹
   if (form.directory) {
@@ -88,6 +96,10 @@ function loadDocument() {
         form.content = response.data.content || ''
         form.directory = response.data.directory
         form.folder = response.data.folder
+        // 保存knowledgeBase（如果有的话，从query或document中获取）
+        if (route.query.kb) {
+          form.knowledgeBase = Number(route.query.kb)
+        }
         console.log('设置表单:', form)
       })
       .catch(error => {
@@ -221,15 +233,18 @@ function downloadOriginal() {
 }
 
 onMounted(() => {
-  // 从查询参数中读取directory和folder
+  // 从查询参数中读取directory, folder和knowledge_base
   const query = route.query
+  if (query.kb) {
+    form.knowledgeBase = Number(query.kb)
+  }
   if (query.directory) {
     form.directory = Number(query.directory)
   }
   if (query.folder) {
     form.folder = Number(query.folder)
   }
-  console.log('从查询参数设置的directory和folder:', form.directory, form.folder)
+  console.log('从查询参数设置的directory, folder和knowledge_base:', form.directory, form.folder, form.knowledgeBase)
   
   loadDocument()
 })
