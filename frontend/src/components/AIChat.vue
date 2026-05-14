@@ -10,7 +10,7 @@
       </div>
       
       <div class="chat-body">
-        <div class="session-list" v-if="showSessionList">
+        <div class="session-list" v-if="showSessionList && chatMode === 'builtin'">
           <div class="session-header">
             <h3>会话列表</h3>
             <button class="new-session-btn" @click="createNewSession">
@@ -36,9 +36,9 @@
         
         <div class="chat-messages" v-else ref="messagesRef">
           <div class="message-list">
-            <div v-if="currentSession && messages.length === 0" class="empty-chat">
+            <div v-if="messages.length === 0" class="empty-chat">
               <div class="empty-icon">💬</div>
-              <p>选择知识库开始对话</p>
+              <p>选择知识库和 Agent 开始对话</p>
             </div>
             
             <div v-for="msg in messages" :key="msg.id" class="message" :class="msg.role">
@@ -77,8 +77,19 @@
         </div>
       </div>
       
-      <div class="chat-footer" v-if="!showSessionList">
-        <div class="kb-selector">
+      <div class="chat-footer" v-if="!(showSessionList && chatMode === 'builtin')">
+        <div class="mode-selector">
+          <label>
+            <input type="radio" v-model="chatMode" value="builtin" />
+            内置 AI
+          </label>
+          <label>
+            <input type="radio" v-model="chatMode" value="openclaw" />
+            OpenClaw
+          </label>
+        </div>
+        
+        <div class="kb-selector" v-if="chatMode === 'builtin'">
           <select v-model="selectedKBId" @change="onKBChange">
             <option value="">选择知识库</option>
             <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
@@ -86,6 +97,25 @@
             </option>
           </select>
         </div>
+        
+        <div class="kb-selector" v-if="chatMode === 'openclaw'">
+          <select v-model="selectedKBId">
+            <option value="">选择知识库（可选）</option>
+            <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
+              {{ kb.name }}
+            </option>
+          </select>
+        </div>
+        
+        <div class="agent-selector" v-if="chatMode === 'openclaw'">
+          <select v-model="selectedAgentId">
+            <option value="">选择 Agent</option>
+            <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+              {{ agent.name }}
+            </option>
+          </select>
+        </div>
+        
         <div class="input-area">
           <textarea 
             v-model="inputMessage" 
@@ -97,7 +127,7 @@
           <button 
             class="send-btn" 
             @click="sendMessage"
-            :disabled="!inputMessage.trim() || !selectedKBId || isLoading"
+            :disabled="!inputMessage.trim() || isLoading || !canSend"
           >
             发送
           </button>
@@ -140,6 +170,17 @@ const inputMessage = ref('')
 const isLoading = ref(false)
 const knowledgeBases = ref([])
 const selectedKBId = ref(null)
+const chatMode = ref('builtin')
+const agents = ref([])
+const selectedAgentId = ref(null)
+
+const canSend = computed(() => {
+  if (chatMode.value === 'builtin') {
+    return selectedKBId.value !== null && selectedKBId.value !== ''
+  } else {
+    return selectedAgentId.value !== null && selectedAgentId.value !== ''
+  }
+})
 
 const closeChat = () => {
   isOpen.value = false
@@ -154,6 +195,20 @@ const loadKnowledgeBases = async () => {
     }
   } catch (error) {
     console.error('Failed to load knowledge bases:', error)
+  }
+}
+
+const loadAgents = async () => {
+  try {
+    const response = await axios.get('/openclaw/agents/')
+    if (response.data.success) {
+      agents.value = response.data.data || []
+      if (agents.value.length > 0) {
+        selectedAgentId.value = agents.value[0].id
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load agents:', error)
   }
 }
 
@@ -209,16 +264,8 @@ const onKBChange = async () => {
 }
 
 const sendMessage = async () => {
-  if (!inputMessage.value.trim() || !selectedKBId.value || isLoading.value) {
+  if (!inputMessage.value.trim() || isLoading.value || !canSend.value) {
     return
-  }
-  
-  // 如果没有当前会话，创建一个
-  if (!currentSession.value) {
-    await createNewSession()
-    if (!currentSession.value) {
-      return
-    }
   }
   
   isLoading.value = true
@@ -236,17 +283,11 @@ const sendMessage = async () => {
   await scrollToBottom()
   
   try {
-    const response = await axios.post(`/documents/chat/sessions/${currentSession.value.id}/send/`, {
-      content: userContent
-    })
-    
-    // 移除临时消息，添加服务器返回的消息
-    messages.value = messages.value.filter(m => m.id !== tempUserMsg.id)
-    messages.value.push(response.data.user_message)
-    messages.value.push(response.data.assistant_message)
-    
-    // 更新当前会话信息
-    await loadSessions()
+    if (chatMode.value === 'builtin') {
+      await sendBuiltinMessage(userContent, tempUserMsg.id)
+    } else {
+      await sendOpenClawMessage(userContent, tempUserMsg.id)
+    }
     
     await scrollToBottom()
   } catch (error) {
@@ -257,6 +298,55 @@ const sendMessage = async () => {
   } finally {
     isLoading.value = false
   }
+}
+
+const sendBuiltinMessage = async (userContent, tempMsgId) => {
+  // 如果没有当前会话，创建一个
+  if (!currentSession.value) {
+    await createNewSession()
+    if (!currentSession.value) {
+      return
+    }
+  }
+  
+  const response = await axios.post(`/documents/chat/sessions/${currentSession.value.id}/send/`, {
+    content: userContent
+  })
+  
+  // 移除临时消息，添加服务器返回的消息
+  messages.value = messages.value.filter(m => m.id !== tempMsgId)
+  messages.value.push(response.data.user_message)
+  messages.value.push(response.data.assistant_message)
+  
+  // 更新当前会话信息
+  await loadSessions()
+}
+
+const sendOpenClawMessage = async (userContent, tempMsgId) => {
+  const response = await axios.post('/openclaw/chat/', {
+    agent_id: selectedAgentId.value,
+    query: userContent,
+    knowledge_base_id: selectedKBId.value
+  })
+  
+  // 移除临时消息，添加服务器返回的消息
+  messages.value = messages.value.filter(m => m.id !== tempMsgId)
+  
+  // 添加用户消息
+  messages.value.push({
+    id: Date.now() - 1,
+    role: 'user',
+    content: userContent,
+    created_at: new Date().toISOString()
+  })
+  
+  // 添加 AI 响应
+  messages.value.push({
+    id: Date.now(),
+    role: 'assistant',
+    content: response.data.data?.response || response.data.data || '未获取到响应',
+    created_at: new Date().toISOString()
+  })
 }
 
 const formatMarkdown = (content) => {
@@ -282,11 +372,21 @@ const scrollToBottom = async () => {
   }
 }
 
+// 监听模式变化
+watch(chatMode, async (newMode) => {
+  if (newMode === 'openclaw') {
+    await loadAgents()
+  }
+})
+
 // 监听打开事件
 watch(isOpen, async (val) => {
   if (val) {
     await loadKnowledgeBases()
     await loadSessions()
+    if (chatMode.value === 'openclaw') {
+      await loadAgents()
+    }
   }
 })
 </script>
@@ -610,11 +710,35 @@ watch(isOpen, async (val) => {
   flex-shrink: 0;
 }
 
+.mode-selector {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+
+.mode-selector label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #555;
+}
+
+.mode-selector input[type="radio"] {
+  cursor: pointer;
+}
+
 .kb-selector {
   margin-bottom: 12px;
 }
 
-.kb-selector select {
+.agent-selector {
+  margin-bottom: 12px;
+}
+
+.kb-selector select,
+.agent-selector select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #ddd;
@@ -623,7 +747,8 @@ watch(isOpen, async (val) => {
   outline: none;
 }
 
-.kb-selector select:focus {
+.kb-selector select:focus,
+.agent-selector select:focus {
   border-color: #667eea;
 }
 

@@ -189,7 +189,7 @@
       
       <el-tab-pane label="系统设置" name="system">
         <el-card title="基本设置">
-          <el-form :model="systemConfig" label-width="120px">
+          <el-form :model="systemConfig" label-width="140px">
             <el-form-item label="系统名称" required>
               <el-input v-model="systemConfig.name" />
             </el-form-item>
@@ -203,6 +203,49 @@
               </el-select>
             </el-form-item>
           </el-form>
+        </el-card>
+        
+        <el-card title="OpenClaw 配置" style="margin-top: 20px;">
+          <div class="model-description">
+            配置 OpenClaw AI Agent 对话功能，接入后可在 Wiki 页面的 AI 助手中选择 Agent 进行对话
+          </div>
+          <el-form :model="systemConfig" label-width="140px">
+            <el-form-item label="API 地址">
+              <el-input v-model="systemConfig.openclaw_api_url" placeholder="例如: http://127.0.0.1:18789 或 http://127.0.0.1:18789/v1" />
+              <div style="color: #909399; font-size: 12px; margin-top: 4px;">
+                可以不带 /v1，系统会自动处理
+              </div>
+            </el-form-item>
+            <el-form-item label="Gateway Token">
+              <el-input v-model="systemConfig.openclaw_gateway_token" type="password" show-password placeholder="OpenClaw Gateway Token" />
+            </el-form-item>
+          </el-form>
+          <div class="card-actions">
+            <el-button type="primary" @click="testOpenClaw" :loading="testingOpenClaw">
+              <el-icon><Connection /></el-icon>
+              测试连接
+            </el-button>
+          </div>
+          <div v-if="openclawTestResult" class="test-result" style="margin-top: 16px;">
+            <el-alert 
+              :title="openclawTestResult.success ? '连接成功' : '连接失败'" 
+              :type="openclawTestResult.success ? 'success' : 'error'"
+              :closable="false"
+            >
+              <p v-if="!openclawTestResult.success">{{ openclawTestResult.message }}</p>
+              <div v-else>
+                <p>{{ openclawTestResult.message }}</p>
+                <div v-if="openclawTestResult.agents && openclawTestResult.agents.length > 0" style="margin-top: 12px;">
+                  <strong>可用 Agent ({{ openclawTestResult.agents.length }}):</strong>
+                  <ul style="margin: 8px 0 0 20px;">
+                    <li v-for="agent in openclawTestResult.agents" :key="agent.id">
+                      {{ agent.name }} (ID: {{ agent.id }})
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </el-alert>
+          </div>
         </el-card>
         
         <div class="settings-actions">
@@ -271,7 +314,9 @@ const aiConfig = reactive({
 const systemConfig = reactive({
     name: '知识库管理系统',
     description: '企业级知识库管理系统',
-    language: 'zh-CN'
+    language: 'zh-CN',
+    openclaw_api_url: '',
+    openclaw_gateway_token: ''
 })
 
 // Load config on mount
@@ -299,6 +344,9 @@ const loadingModels = reactive({
   embedding: false,
   rerank: false
 })
+
+const testingOpenClaw = ref(false)
+const openclawTestResult = ref<{ success: boolean; message: string; agents?: any[] } | null>(null)
 
 const testResults = reactive({
   textGeneration: null as { success: boolean; message: string } | null,
@@ -403,6 +451,49 @@ function saveSystemSettings() {
       console.error('保存失败:', error)
       showNotification('保存失败: ' + (error.response?.data?.message || error.message), 'error')
     })
+}
+
+const testOpenClaw = async () => {
+  if (!systemConfig.openclaw_api_url || !systemConfig.openclaw_gateway_token) {
+    openclawTestResult.value = {
+      success: false,
+      message: '请先填写 API 地址和 Gateway Token'
+    }
+    return
+  }
+  
+  testingOpenClaw.value = true
+  openclawTestResult.value = null
+  
+  try {
+    // 先临时保存配置
+    await axios.post('/system/config/', systemConfig)
+    
+    // 测试连接
+    const response = await axios.get('/openclaw/agents/')
+    
+    if (response.data.success) {
+      const agents = response.data.data || []
+      openclawTestResult.value = {
+        success: true,
+        message: `成功连接到 OpenClaw！`,
+        agents: agents
+      }
+    } else {
+      openclawTestResult.value = {
+        success: false,
+        message: response.data.message || '连接失败'
+      }
+    }
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.message || error.message || '连接失败'
+    openclawTestResult.value = {
+      success: false,
+      message: errorMsg
+    }
+  } finally {
+    testingOpenClaw.value = false
+  }
 }
 
 function showNotification(message: string | object, type: 'success' | 'error' | 'info' = 'success') {

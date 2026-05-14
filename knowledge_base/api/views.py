@@ -45,7 +45,9 @@ def init_config_dir():
         default_system_config = {
             "name": "知识库管理系统",
             "description": "企业级知识库管理系统",
-            "language": "zh-CN"
+            "language": "zh-CN",
+            "openclaw_api_url": "",
+            "openclaw_gateway_token": ""
         }
         with open(SYSTEM_CONFIG_FILE, 'w') as f:
             json.dump(default_system_config, f, indent=2)
@@ -296,3 +298,154 @@ def system_config(request):
                 'success': False,
                 'message': f'保存失败: {str(e)}'
             })
+
+
+# ========== OpenClaw 相关接口 ==========
+import asyncio
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from documents.models import KnowledgeBase, Directory, Document, DocumentVersion
+from .openclaw_client import OpenClawClient
+import os
+
+
+def get_system_config():
+    """获取系统配置"""
+    init_config_dir()
+    if os.path.exists(SYSTEM_CONFIG_FILE):
+        with open(SYSTEM_CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    return {"openclaw_api_url": "", "openclaw_gateway_token": ""}
+
+
+class OpenClawAgentsView(APIView):
+    """获取 OpenClaw Agent 列表"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            config = get_system_config()
+            api_url = config.get('openclaw_api_url', '')
+            gateway_token = config.get('openclaw_gateway_token', '')
+            
+            if not api_url:
+                return Response({'success': False, 'message': 'OpenClaw API 地址未配置'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not gateway_token:
+                return Response({'success': False, 'message': 'OpenClaw Gateway Token 未配置'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 创建客户端
+            keypair_file = os.path.join(os.path.dirname(__file__), '..', 'openclaw_keypair.pem')
+            client = OpenClawClient(
+                api_url=api_url,
+                token=gateway_token,
+                keypair_file=keypair_file
+            )
+            
+            # 获取 Agent 列表
+            agents_data = asyncio.run(client.list_agents())
+            
+            # 格式化响应
+            agents = []
+            for agent in agents_data:
+                agent_id = agent.get('id', '')
+                agents.append({
+                    'id': agent_id,
+                    'name': agent.get('name', agent_id),
+                    'description': agent.get('description', '')
+                })
+            
+            return Response({'success': True, 'data': agents})
+        except Exception as e:
+            print(f"[ERROR] OpenClawAgentsView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'success': False, 'message': f'获取 Agent 列表失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class OpenClawChatView(APIView):
+    """与 OpenClaw Agent 对话"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            config = get_system_config()
+            api_url = config.get('openclaw_api_url', '')
+            gateway_token = config.get('openclaw_gateway_token', '')
+            
+            if not api_url:
+                return Response({'success': False, 'message': 'OpenClaw API 地址未配置'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not gateway_token:
+                return Response({'success': False, 'message': 'OpenClaw Gateway Token 未配置'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            agent_id = request.data.get('agent_id')
+            user_query = request.data.get('query')
+            knowledge_base_id = request.data.get('knowledge_base_id')
+            
+            if not agent_id or not user_query:
+                return Response({'success': False, 'message': '缺少必要参数: agent_id 和 query'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 构建知识库上下文
+            context = ""
+            if knowledge_base_id:
+                try:
+                    # 获取知识库
+                    kb = KnowledgeBase.objects.get(id=knowledge_base_id)
+                    
+                    # 获取知识库下的文档
+                    documents = Document.objects.filter(directory__knowledge_base=kb)
+                    
+                    context += f"【知识库: {kb.name}】\n"
+                    
+                    for doc in documents[:20]:  # 最多取20个文档，避免上下文过长
+                        # 获取最新版本
+                        latest_version = doc.get_current_version()
+                        if latest_version:
+                            context += f"\n--- 文档: {doc.title} ---\n"
+                            content = latest_version.content
+                            # 截取文档内容，避免过长
+                            if len(content) > 2000:
+                                content = content[:2000] + "...[内容已截断]"
+                            context += content + "\n"
+                except KnowledgeBase.DoesNotExist:
+                    pass
+            
+            # 构建完整的用户消息
+            full_user_message = user_query
+            if context:
+                full_user_message = f"{context}\n\n用户问题: {user_query}"
+            
+            # 创建客户端
+            keypair_file = os.path.join(os.path.dirname(__file__), '..', 'openclaw_keypair.pem')
+            client = OpenClawClient(
+                api_url=api_url,
+                token=gateway_token,
+                keypair_file=keypair_file
+            )
+            
+            # 使用用户名作为会话键，实现会话隔离
+            session_key = request.user.username
+            
+            # 发送消息
+            assistant_content = asyncio.run(
+                client.chat(
+                    message=full_user_message,
+                    session_key=session_key,
+                    agent_id=agent_id
+                )
+            )
+            
+            return Response({
+                'success': True,
+                'data': {
+                    'response': assistant_content
+                }
+            })
+        except Exception as e:
+            print(f"[ERROR] OpenClawChatView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'success': False, 'message': f'对话失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

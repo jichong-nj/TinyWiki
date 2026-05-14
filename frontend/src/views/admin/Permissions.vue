@@ -23,9 +23,9 @@
       </el-table-column>
     </el-table>
     
-    <!-- 编辑用户角色对话框 -->
-    <el-dialog v-model="showEditUserModal" title="编辑用户角色" width="400px">
-      <el-form :model="userForm" label-width="80px">
+    <!-- 编辑用户对话框 -->
+    <el-dialog v-model="showEditUserModal" title="编辑用户" width="500px">
+      <el-form :model="userForm" label-width="120px">
         <el-form-item label="用户名">
           <span>{{ editingUser?.username }}</span>
         </el-form-item>
@@ -36,10 +36,14 @@
             <el-option value="superuser" label="超级管理员" />
           </el-select>
         </el-form-item>
+        <el-divider content-position="left">OpenClaw 配置</el-divider>
+        <el-form-item label="API Key">
+          <el-input v-model="userForm.openclaw_api_key" type="password" show-password placeholder="用户的 OpenClaw API Key" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditUserModal = false">取消</el-button>
-        <el-button type="primary" @click="saveUserRole">保存</el-button>
+        <el-button type="primary" @click="saveUser">保存</el-button>
       </template>
     </el-dialog>
     
@@ -88,6 +92,7 @@ interface User {
   email: string
   role: string
   date_joined: string
+  openclaw_api_key?: string
 }
 
 interface KnowledgeBase {
@@ -113,7 +118,8 @@ const showPermissionModal = ref(false)
 const editingUser = ref<User | null>(null)
 
 const userForm = reactive({
-  role: ''
+  role: '',
+  openclaw_api_key: ''
 })
 
 const selectedKnowledgeBases = ref<number[]>([])
@@ -176,6 +182,7 @@ function loadDirectories() {
 function openEditUserModal(user: User) {
   editingUser.value = user
   userForm.role = user.role
+  userForm.openclaw_api_key = user.openclaw_api_key || ''
   showEditUserModal.value = true
 }
 
@@ -195,18 +202,21 @@ function openPermissionModal(user: User) {
   showPermissionModal.value = true
 }
 
-function saveUserRole() {
+function saveUser() {
   if (!editingUser.value) return
   
-  axios.put(`/auth/users/${editingUser.value.id}/`, { role: userForm.role })
+  axios.put(`/auth/users/${editingUser.value.id}/`, { 
+    role: userForm.role,
+    openclaw_api_key: userForm.openclaw_api_key
+  })
     .then(() => {
-      ElMessage.success('角色更新成功')
+      ElMessage.success('用户信息更新成功')
       showEditUserModal.value = false
       loadUsers()
     })
     .catch(error => {
-      ElMessage.error('角色更新失败')
-      console.error('更新用户角色失败:', error)
+      ElMessage.error('用户信息更新失败')
+      console.error('更新用户信息失败:', error)
     })
 }
 

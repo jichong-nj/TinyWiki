@@ -35,3 +35,5 @@ db.sqlite3
 knowledge_base/storage/
 knowledge_base/staticfiles/
 knowledge_base/media/
+knowledge_base/openclaw_keypair.pem
+knowledge_base/test_keypair.pem

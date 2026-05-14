@@ -1,5 +1,7 @@
 {
   "name": "\u77e5\u8bc6\u5e93\u7ba1\u7406\u7cfb\u7edf",
   "description": "\u4f01\u4e1a\u7ea7\u77e5\u8bc6\u5e93\u7ba1\u7406\u7cfb\u7edf",
-  "language": "zh-CN"
+  "language": "zh-CN",
+  "openclaw_api_url": "http://localhost:18789/",
+  "openclaw_gateway_token": "123ABCdef*"
 }
