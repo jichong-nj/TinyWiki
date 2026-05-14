@@ -1,12 +1,17 @@
 <template>
   <div class="ai-chat-overlay" v-if="isOpen">
-    <div class="ai-chat-panel">
+    <div class="ai-chat-panel" :class="{ maximized: isMaximized }">
       <div class="chat-header">
         <div class="chat-header-left">
           <span class="chat-icon">🤖</span>
           <span class="chat-title">AI 助手</span>
         </div>
-        <button class="close-btn" @click="closeChat">×</button>
+        <div class="chat-header-right">
+          <button class="maximize-btn" @click="toggleMaximize">
+            {{ isMaximized ? '↩' : '⛶' }}
+          </button>
+          <button class="close-btn" @click="closeChat">×</button>
+        </div>
       </div>
       
       <div class="chat-body">
@@ -78,67 +83,69 @@
       </div>
       
       <div class="chat-footer" v-if="!(showSessionList && chatMode === 'builtin')">
-        <div class="mode-selector">
-          <label>
-            <input type="radio" v-model="chatMode" value="builtin" />
-            内置 AI
-          </label>
-          <label>
-            <input type="radio" v-model="chatMode" value="openclaw" />
-            OpenClaw
-          </label>
-        </div>
-        
-        <div class="kb-selector" v-if="chatMode === 'builtin'">
-          <select v-model="selectedKBId" @change="onKBChange">
-            <option value="">选择知识库</option>
-            <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
-              {{ kb.name }}
-            </option>
-          </select>
-        </div>
-        
-        <div class="kb-selector" v-if="chatMode === 'openclaw'">
-          <select v-model="selectedKBId">
-            <option value="">选择知识库（可选）</option>
-            <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
-              {{ kb.name }}
-            </option>
-          </select>
-        </div>
-        
-        <div class="agent-selector" v-if="chatMode === 'openclaw'">
-          <select v-model="selectedAgentId">
-            <option value="">选择 Agent</option>
-            <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-              {{ agent.name }}
-            </option>
-          </select>
+        <div class="top-selectors">
+          <div class="mode-selector">
+            <label>
+              <input type="radio" v-model="chatMode" value="builtin" />
+              内置
+            </label>
+            <label>
+              <input type="radio" v-model="chatMode" value="openclaw" />
+              OpenClaw
+            </label>
+          </div>
+          
+          <div class="kb-selector" v-if="chatMode === 'builtin'">
+            <select v-model="selectedKBId" @change="onKBChange">
+              <option value="">选择知识库</option>
+              <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
+                {{ kb.name }}
+              </option>
+            </select>
+          </div>
+          
+          <div class="kb-selector" v-if="chatMode === 'openclaw'">
+            <select v-model="selectedKBId">
+              <option value="">知识库（可选）</option>
+              <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
+                {{ kb.name }}
+              </option>
+            </select>
+          </div>
+          
+          <div class="agent-selector" v-if="chatMode === 'openclaw'">
+            <select v-model="selectedAgentId">
+              <option value="">选择 Agent</option>
+              <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+                {{ agent.name }}
+              </option>
+            </select>
+          </div>
         </div>
 
-        <div class="attachment-uploader" v-if="chatMode === 'openclaw'">
-          <label class="attachment-label">
-            <input
-              type="file"
-              multiple
-              ref="attachmentInputRef"
-              @change="handleAttachmentChange"
-            />
-            选择附件
-          </label>
-          <div class="attachment-list" v-if="openclawAttachments.length > 0">
-            <div
-              class="attachment-item"
-              v-for="(file, index) in openclawAttachments"
-              :key="file.name + file.size"
-            >
-              <span>{{ file.name }} ({{ formatFileSize(file.size) }})</span>
-              <button type="button" @click="removeAttachment(index)">删除</button>
-            </div>
+        <div class="attachment-list" v-if="openclawAttachments.length > 0">
+          <div
+            class="attachment-item"
+            v-for="(file, index) in openclawAttachments"
+            :key="file.name + file.size"
+          >
+            <span>{{ file.name }} ({{ formatFileSize(file.size) }})</span>
+            <button type="button" @click="removeAttachment(index)">×</button>
           </div>
         </div>
         
         <div class="input-area">
+          <div class="attachment-uploader" v-if="chatMode === 'openclaw'">
+            <label class="attachment-label">
+              <input
+                type="file"
+                multiple
+                ref="attachmentInputRef"
+                @change="handleAttachmentChange"
+              />
+              📎
+            </label>
+          </div>
           <textarea 
             v-model="inputMessage" 
             placeholder="输入问题或上传附件..." 
@@ -164,290 +171,284 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue'
-import axios from '../axios'
-import { marked } from 'marked'
+import { ref, watch, nextTick, computed } from 'vue';
+import axios from '../axios';
+import { marked } from 'marked';
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
     default: false
   }
-})
+});
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue']);
 
 const isOpen = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val)
-})
+});
 
-const messagesRef = ref(null)
-const textareaRef = ref(null)
-const attachmentInputRef = ref(null)
-const openclawAttachments = ref([])
-const showSessionList = ref(false)
-const sessions = ref([])
-const currentSession = ref(null)
-const messages = ref([])
-const inputMessage = ref('')
-const isLoading = ref(false)
-const knowledgeBases = ref([])
-const selectedKBId = ref(null)
-const chatMode = ref('builtin')
-const agents = ref([])
-const selectedAgentId = ref(null)
+const isMaximized = ref(false);
+const messagesRef = ref(null);
+const textareaRef = ref(null);
+const attachmentInputRef = ref(null);
+const openclawAttachments = ref([]);
+const showSessionList = ref(false);
+const sessions = ref([]);
+const currentSession = ref(null);
+const messages = ref([]);
+const inputMessage = ref('');
+const isLoading = ref(false);
+const knowledgeBases = ref([]);
+const selectedKBId = ref(null);
+const chatMode = ref('builtin');
+const agents = ref([]);
+const selectedAgentId = ref(null);
 
 const canSend = computed(() => {
   if (chatMode.value === 'builtin') {
-    return selectedKBId.value !== null && selectedKBId.value !== ''
+    return selectedKBId.value !== null && selectedKBId.value !== '';
   } else {
-    return selectedAgentId.value !== null && selectedAgentId.value !== '' && (inputMessage.value.trim() !== '' || openclawAttachments.value.length > 0)
+    return selectedAgentId.value !== null && selectedAgentId.value !== '' && (inputMessage.value.trim() !== '' || openclawAttachments.value.length > 0);
   }
-})
+});
 
 const closeChat = () => {
-  isOpen.value = false
-}
+  isOpen.value = false;
+};
+
+const toggleMaximize = () => {
+  isMaximized.value = !isMaximized.value;
+};
 
 const loadKnowledgeBases = async () => {
   try {
-    const response = await axios.get('/documents/knowledge-bases/')
-    knowledgeBases.value = response.data
+    const response = await axios.get('/documents/knowledge-bases/');
+    knowledgeBases.value = response.data;
     if (knowledgeBases.value.length > 0) {
-      selectedKBId.value = knowledgeBases.value[0].id
+      selectedKBId.value = knowledgeBases.value[0].id;
     }
   } catch (error) {
-    console.error('Failed to load knowledge bases:', error)
+    console.error('Failed to load knowledge bases:', error);
   }
-}
+};
 
 const loadAgents = async () => {
   try {
-    const response = await axios.get('/openclaw/agents/')
+    const response = await axios.get('/openclaw/agents/');
     if (response.data.success) {
-      agents.value = response.data.data || []
+      agents.value = response.data.data || [];
       if (agents.value.length > 0) {
-        selectedAgentId.value = agents.value[0].id
+        selectedAgentId.value = agents.value[0].id;
       }
     }
   } catch (error) {
-    console.error('Failed to load agents:', error)
+    console.error('Failed to load agents:', error);
   }
-}
+};
 
 const loadSessions = async () => {
   try {
     const response = await axios.get('/documents/chat/sessions/', {
       params: { knowledge_base_id: selectedKBId.value }
-    })
-    sessions.value = response.data
+    });
+    sessions.value = response.data;
   } catch (error) {
-    console.error('Failed to load sessions:', error)
+    console.error('Failed to load sessions:', error);
   }
-}
+};
 
 const createNewSession = async () => {
   if (!selectedKBId.value) {
-    alert('请先选择知识库')
-    return
+    alert('请先选择知识库');
+    return;
   }
   
   try {
     const response = await axios.post('/documents/chat/sessions/', {
       knowledge_base_id: selectedKBId.value,
       title: '新对话'
-    })
-    currentSession.value = response.data
-    messages.value = []
-    showSessionList.value = false
+    });
+    currentSession.value = response.data;
+    messages.value = [];
+    showSessionList.value = false;
   } catch (error) {
-    console.error('Failed to create session:', error)
+    console.error('Failed to create session:', error);
   }
-}
+};
 
 const loadSession = async (session) => {
-  currentSession.value = session
-  showSessionList.value = false
+  currentSession.value = session;
+  showSessionList.value = false;
   try {
-    const response = await axios.get(`/documents/chat/sessions/${session.id}/`)
-    messages.value = response.data.messages
+    const response = await axios.get(`/documents/chat/sessions/${session.id}/`);
+    messages.value = response.data.messages;
   } catch (error) {
-    console.error('Failed to load session:', error)
+    console.error('Failed to load session:', error);
   }
-}
+};
 
 const onKBChange = async () => {
-  await loadSessions()
+  await loadSessions();
   if (sessions.value.length > 0) {
-    await loadSession(sessions.value[0])
+    await loadSession(sessions.value[0]);
   } else {
-    currentSession.value = null
-    messages.value = []
+    currentSession.value = null;
+    messages.value = [];
   }
-}
+};
 
 const sendMessage = async () => {
-  const hasAttachments = chatMode.value === 'openclaw' && openclawAttachments.value.length > 0
+  const hasAttachments = chatMode.value === 'openclaw' && openclawAttachments.value.length > 0;
   if ((!inputMessage.value.trim() && !hasAttachments) || isLoading.value || !canSend.value) {
-    return
+    return;
   }
   
-  isLoading.value = true
-  let userContent = inputMessage.value.trim()
+  isLoading.value = true;
+  let userContent = inputMessage.value.trim();
   if (!userContent && hasAttachments) {
-    userContent = '请分析附件内容'
+    userContent = '请分析附件内容';
   }
-  inputMessage.value = ''
+  inputMessage.value = '';
   
-  // 立即添加用户消息到界面
   const tempUserMsg = {
     id: Date.now(),
     role: 'user',
     content: userContent,
     created_at: new Date().toISOString()
-  }
-  messages.value.push(tempUserMsg)
-  await scrollToBottom()
+  };
+  messages.value.push(tempUserMsg);
+  await scrollToBottom();
   
   try {
     if (chatMode.value === 'builtin') {
-      await sendBuiltinMessage(userContent, tempUserMsg.id)
+      await sendBuiltinMessage(userContent, tempUserMsg.id);
     } else {
-      await sendOpenClawMessage(userContent, tempUserMsg.id)
+      await sendOpenClawMessage(userContent, tempUserMsg.id);
     }
     
-    await scrollToBottom()
+    await scrollToBottom();
   } catch (error) {
-    console.error('Failed to send message:', error)
-    // 移除临时消息
-    messages.value = messages.value.filter(m => m.id !== tempUserMsg.id)
-    alert('发送消息失败，请重试')
+    console.error('Failed to send message:', error);
+    messages.value = messages.value.filter(m => m.id !== tempUserMsg.id);
+    alert('发送消息失败，请重试');
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
-}
+};
 
 const sendBuiltinMessage = async (userContent, tempMsgId) => {
-  // 如果没有当前会话，创建一个
   if (!currentSession.value) {
-    await createNewSession()
+    await createNewSession();
     if (!currentSession.value) {
-      return
+      return;
     }
   }
   
   const response = await axios.post(`/documents/chat/sessions/${currentSession.value.id}/send/`, {
     content: userContent
-  })
+  });
   
-  // 移除临时消息，添加服务器返回的消息
-  messages.value = messages.value.filter(m => m.id !== tempMsgId)
-  messages.value.push(response.data.user_message)
-  messages.value.push(response.data.assistant_message)
+  messages.value = messages.value.filter(m => m.id !== tempMsgId);
+  messages.value.push(response.data.user_message);
+  messages.value.push(response.data.assistant_message);
   
-  // 更新当前会话信息
-  await loadSessions()
-}
+  await loadSessions();
+};
 
 const sendOpenClawMessage = async (userContent, tempMsgId) => {
-  const formData = new FormData()
-  formData.append('agent_id', selectedAgentId.value)
-  formData.append('query', userContent)
+  const formData = new FormData();
+  formData.append('agent_id', selectedAgentId.value);
+  formData.append('query', userContent);
   if (selectedKBId.value) {
-    formData.append('knowledge_base_id', selectedKBId.value)
+    formData.append('knowledge_base_id', selectedKBId.value);
   }
   openclawAttachments.value.forEach((file) => {
-    formData.append('attachments', file)
-  })
+    formData.append('attachments', file);
+  });
 
-  const response = await axios.post('/openclaw/chat/', formData)
+  const response = await axios.post('/openclaw/chat/', formData);
   
-  // 清空附件输入
-  openclawAttachments.value = []
+  openclawAttachments.value = [];
   if (attachmentInputRef.value) {
-    attachmentInputRef.value.value = ''
+    attachmentInputRef.value.value = '';
   }
 
-  // 移除临时消息，添加服务器返回的消息
-  messages.value = messages.value.filter(m => m.id !== tempMsgId)
+  messages.value = messages.value.filter(m => m.id !== tempMsgId);
   
-  // 添加用户消息
   messages.value.push({
     id: Date.now() - 1,
     role: 'user',
     content: userContent,
     created_at: new Date().toISOString()
-  })
+  });
   
-  // 添加 AI 响应
   messages.value.push({
     id: Date.now(),
     role: 'assistant',
     content: response.data.data?.response || response.data.data || '未获取到响应',
     created_at: new Date().toISOString()
-  })
-}
+  });
+};
 
 const handleAttachmentChange = (event) => {
-  const files = event.target.files ? Array.from(event.target.files) : []
-  openclawAttachments.value = files
-}
+  const files = event.target.files ? Array.from(event.target.files) : [];
+  openclawAttachments.value = files;
+};
 
 const removeAttachment = (index) => {
-  openclawAttachments.value.splice(index, 1)
-}
+  openclawAttachments.value.splice(index, 1);
+};
 
 const formatFileSize = (bytes) => {
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  if (kb < 1024) return `${kb.toFixed(1)} KB`
-  const mb = kb / 1024
-  if (mb < 1024) return `${mb.toFixed(1)} MB`
-  const gb = mb / 1024
-  return `${gb.toFixed(1)} GB`
-}
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  const gb = mb / 1024;
+  return `${gb.toFixed(1)} GB`;
+};
 
 const formatMarkdown = (content) => {
-  if (!content) return ''
-  return marked.parse(content, { breaks: true, gfm: true })
-}
+  if (!content) return '';
+  return marked.parse(content, { breaks: true, gfm: true });
+};
 
 const formatTime = (dateStr) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
   return date.toLocaleDateString('zh-CN', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
-  })
-}
+  });
+};
 
 const scrollToBottom = async () => {
-  await nextTick()
+  await nextTick();
   if (messagesRef.value) {
-    messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+    messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
   }
-}
+};
 
-// 监听模式变化
 watch(chatMode, async (newMode) => {
   if (newMode === 'openclaw') {
-    await loadAgents()
+    await loadAgents();
   }
-})
+});
 
-// 监听打开事件
 watch(isOpen, async (val) => {
   if (val) {
-    await loadKnowledgeBases()
-    await loadSessions()
+    await loadKnowledgeBases();
+    await loadSessions();
     if (chatMode.value === 'openclaw') {
-      await loadAgents()
+      await loadAgents();
     }
   }
-})
+});
 </script>
 
 <style scoped>
@@ -477,11 +478,19 @@ watch(isOpen, async (val) => {
   overflow: hidden;
 }
 
+.ai-chat-panel.maximized {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 0;
+}
+
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 8px 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   flex-shrink: 0;
@@ -493,27 +502,35 @@ watch(isOpen, async (val) => {
   gap: 12px;
 }
 
+.chat-header-right {
+  display: flex;
+  gap: 8px;
+}
+
 .chat-icon {
   font-size: 24px;
 }
 
 .chat-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
-.close-btn {
+.close-btn,
+.maximize-btn {
   background: none;
   border: none;
   color: white;
-  font-size: 28px;
+  font-size: 24px;
   cursor: pointer;
   padding: 4px 12px;
   border-radius: 8px;
   transition: background 0.2s;
+  line-height: 1;
 }
 
-.close-btn:hover {
+.close-btn:hover,
+.maximize-btn:hover {
   background: rgba(255, 255, 255, 0.2);
 }
 
@@ -534,24 +551,24 @@ watch(isOpen, async (val) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 12px 20px;
   border-bottom: 1px solid #eee;
 }
 
 .session-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   color: #333;
 }
 
 .new-session-btn {
-  padding: 8px 16px;
+  padding: 8px 14px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   transition: transform 0.2s;
 }
 
@@ -565,7 +582,7 @@ watch(isOpen, async (val) => {
 }
 
 .session-item {
-  padding: 16px 20px;
+  padding: 12px 20px;
   border-bottom: 1px solid #f5f5f5;
   cursor: pointer;
   transition: background 0.2s;
@@ -581,45 +598,45 @@ watch(isOpen, async (val) => {
 }
 
 .session-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: #333;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .session-meta {
   display: flex;
-  gap: 12px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 12px;
   color: #888;
 }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 12px;
 }
 
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
 .empty-chat {
   text-align: center;
-  padding: 60px 20px;
+  padding: 40px 20px;
   color: #888;
 }
 
 .empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  font-size: 40px;
+  margin-bottom: 12px;
 }
 
 .message {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
 .message.user {
@@ -627,13 +644,13 @@ watch(isOpen, async (val) => {
 }
 
 .message-avatar {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 18px;
   flex-shrink: 0;
 }
 
@@ -656,10 +673,11 @@ watch(isOpen, async (val) => {
 }
 
 .message-text {
-  padding: 12px 16px;
+  padding: 8px 12px;
   border-radius: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
   word-wrap: break-word;
+  font-size: 14px;
 }
 
 .message.user .message-text {
@@ -675,23 +693,24 @@ watch(isOpen, async (val) => {
 }
 
 .message-text :deep(p) {
-  margin: 8px 0;
+  margin: 6px 0;
 }
 
 .message-text :deep(pre) {
   background: #2d2d2d;
   color: #ccc;
-  padding: 12px;
+  padding: 10px;
   border-radius: 8px;
   overflow-x: auto;
-  margin: 12px 0;
+  margin: 10px 0;
 }
 
 .message-text :deep(code) {
   background: rgba(0, 0, 0, 0.1);
-  padding: 2px 6px;
+  padding: 2px 5px;
   border-radius: 4px;
   font-family: monospace;
+  font-size: 13px;
 }
 
 .message.user .message-text :deep(code) {
@@ -699,23 +718,23 @@ watch(isOpen, async (val) => {
 }
 
 .sources {
-  margin-top: 12px;
-  padding: 12px;
+  margin-top: 8px;
+  padding: 8px 10px;
   background: #f8f9fa;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .sources-title {
   font-weight: 600;
   color: #555;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .source-item {
   display: flex;
   justify-content: space-between;
-  padding: 6px 0;
+  padding: 4px 0;
   border-bottom: 1px solid #eee;
 }
 
@@ -735,7 +754,7 @@ watch(isOpen, async (val) => {
 .typing-indicator {
   display: flex;
   gap: 4px;
-  padding: 12px 16px;
+  padding: 10px 12px;
 }
 
 .typing-indicator span {
@@ -759,28 +778,36 @@ watch(isOpen, async (val) => {
     transform: translateY(0);
   }
   30% {
-    transform: translateY(-8px);
+    transform: translateY(-6px);
   }
 }
 
 .chat-footer {
-  padding: 16px 20px;
+  padding: 10px 16px;
   border-top: 1px solid #eee;
   flex-shrink: 0;
 }
 
+.top-selectors {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .mode-selector {
   display: flex;
-  gap: 20px;
-  margin-bottom: 12px;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .mode-selector label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   color: #555;
 }
 
@@ -788,68 +815,19 @@ watch(isOpen, async (val) => {
   cursor: pointer;
 }
 
-.kb-selector {
-  margin-bottom: 12px;
-}
-
+.kb-selector,
 .agent-selector {
-  margin-bottom: 12px;
-}
-
-.attachment-uploader {
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.attachment-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 14px;
-  border: 1px dashed #667eea;
-  border-radius: 10px;
-  color: #667eea;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.attachment-label input[type="file"] {
-  display: none;
-}
-
-.attachment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.attachment-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border: 1px solid #eee;
-  border-radius: 10px;
-  background: #fbfbff;
-  font-size: 13px;
-}
-
-.attachment-item button {
-  border: none;
-  background: transparent;
-  color: #d23f3f;
-  cursor: pointer;
+  flex: 1;
+  min-width: 140px;
 }
 
 .kb-selector select,
 .agent-selector select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
   outline: none;
 }
 
@@ -858,21 +836,74 @@ watch(isOpen, async (val) => {
   border-color: #667eea;
 }
 
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fbfbff;
+  font-size: 12px;
+}
+
+.attachment-item button {
+  border: none;
+  background: transparent;
+  color: #d23f3f;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+}
+
 .input-area {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-end;
+}
+
+.attachment-uploader {
+  flex-shrink: 0;
+}
+
+.attachment-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px dashed #667eea;
+  border-radius: 8px;
+  color: #667eea;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.attachment-label:hover {
+  background: #f0f2ff;
+}
+
+.attachment-label input[type="file"] {
+  display: none;
 }
 
 .input-area textarea {
   flex: 1;
-  padding: 12px 16px;
+  padding: 8px 12px;
   border: 1px solid #ddd;
-  border-radius: 12px;
+  border-radius: 8px;
   font-size: 14px;
   resize: none;
   outline: none;
-  max-height: 120px;
+  max-height: 100px;
   font-family: inherit;
 }
 
@@ -881,15 +912,16 @@ watch(isOpen, async (val) => {
 }
 
 .send-btn {
-  padding: 12px 24px;
+  padding: 8px 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  border-radius: 12px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
   transition: transform 0.2s, opacity 0.2s;
+  height: 36px;
 }
 
 .send-btn:hover:not(:disabled) {
@@ -903,12 +935,12 @@ watch(isOpen, async (val) => {
 
 .back-btn {
   width: 100%;
-  padding: 12px;
+  padding: 10px;
   background: #f5f5f5;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   color: #555;
   transition: background 0.2s;
 }
