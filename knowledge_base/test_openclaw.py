@@ -19,6 +19,36 @@ def generate_ed25519_keypair():
     return private_key, public_key
 
 
+def save_keypair_to_file(private_key, public_key, file_path):
+    """Save Ed25519 keypair to file (PEM format)"""
+    private_pem = private_key.private_bytes(
+        encoding=Encoding.PEM,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption()
+    )
+    public_pem = public_key.public_bytes(
+        encoding=Encoding.PEM,
+        format=PublicFormat.SubjectPublicKeyInfo
+    )
+    with open(file_path, "wb") as f:
+        f.write(private_pem + b"\n" + public_pem)
+
+
+def load_keypair_from_file(file_path):
+    """Load Ed25519 keypair from file"""
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
+    with open(file_path, "rb") as f:
+        content = f.read()
+    # Split private and public key parts
+    private_pem_end = content.find(b"-----END PRIVATE KEY-----") + len(b"-----END PRIVATE KEY-----")
+    private_pem = content[:private_pem_end]
+    public_pem = content[private_pem_end:].lstrip()
+    
+    private_key = load_pem_private_key(private_pem, password=None)
+    public_key = load_pem_public_key(public_pem)
+    return private_key, public_key
+
+
 def derive_device_id(public_key):
     """Derive device ID from public key: SHA-256(raw public key).hex()"""
     raw_public_key = public_key.public_bytes(
@@ -56,9 +86,19 @@ async def test_openclaw_ws():
     
     print(f"Connecting to {ws_url}...")
     
-    # Generate keypair
-    print("Generating Ed25519 keypair...")
-    private_key, public_key = generate_ed25519_keypair()
+    import os
+    keypair_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_keypair.pem")
+    
+    # Check if keypair file exists
+    if os.path.exists(keypair_file):
+        print("Loading existing Ed25519 keypair from file...")
+        private_key, public_key = load_keypair_from_file(keypair_file)
+    else:
+        print("Generating new Ed25519 keypair...")
+        private_key, public_key = generate_ed25519_keypair()
+        save_keypair_to_file(private_key, public_key, keypair_file)
+        print(f"Keypair saved to {keypair_file}")
+    
     device_id = derive_device_id(public_key)
     public_key_b64 = encode_public_key(public_key)
     print(f"Device ID: {device_id}")
@@ -79,6 +119,7 @@ async def test_openclaw_ws():
             role = "operator"
             scopes = ["operator.admin", "operator.read", "operator.write", "operator.approvals", "operator.pairing"]
             platform = "Linux x86_64"
+            fixed_instance_id = "test-cli-instance-12345"
             
             # Build v2 signature payload (simpler)
             scopes_str = ",".join(scopes)
@@ -102,7 +143,7 @@ async def test_openclaw_ws():
                         "version": "control-ui",
                         "platform": platform,
                         "mode": client_mode,
-                        "instanceId": str(uuid.uuid4())
+                        "instanceId": fixed_instance_id
                     },
                     "role": role,
                     "scopes": scopes,
@@ -162,20 +203,34 @@ async def test_openclaw_ws():
                         history_resp = msg_data
                         break
                 
-                # Function to send a message and wait for response
-                async def send_message_and_wait(msg_text):
+                # Function to send a message (with optional attachments) and wait for response
+                async def send_message_and_wait(msg_text, attachments=None):
                     print(f"\n💬 Sending '{msg_text}' to session '{session_key}'...")
+                    
+                    params = {
+                        "sessionKey": session_key,
+                        "idempotencyKey": str(uuid.uuid4()),
+                        "message": msg_text
+                    }
+                    
+                    if attachments:
+                        params["attachments"] = attachments
+                        print(f"  Including {len(attachments)} attachment(s)")
                     
                     send_req = {
                         "type": "req",
                         "id": str(uuid.uuid4()),
                         "method": "chat.send",
-                        "params": {
-                            "sessionKey": session_key,
-                            "idempotencyKey": str(uuid.uuid4()),
-                            "message": msg_text
-                        }
+                        "params": params
                     }
+                    
+                    # Print send request (truncate media for readability)
+                    print_send_req = send_req.copy()
+                    if "attachments" in print_send_req["params"]:
+                        for att in print_send_req["params"]["attachments"]:
+                            if "media" in att and len(att["media"]) > 100:
+                                att["media"] = att["media"][:100] + "..."
+                    print(f"📤 Sending request: {json.dumps(print_send_req, indent=2)}")
                     
                     await websocket.send(json.dumps(send_req))
                     
@@ -220,11 +275,55 @@ async def test_openclaw_ws():
                         return full_content
                     return ""
                 
+                # Helper function to load file as base64 attachment
+                def load_file_as_attachment(file_path):
+                    """Load a file and return as attachment dict"""
+                    import os
+                    filename = os.path.basename(file_path)
+                    
+                    # Determine MIME type
+                    ext = os.path.splitext(filename)[1].lower()
+                    if ext == ".md":
+                        mime_type = "text/markdown"
+                    elif ext == ".txt":
+                        mime_type = "text/plain"
+                    elif ext in [".jpg", ".jpeg"]:
+                        mime_type = "image/jpeg"
+                    elif ext == ".png":
+                        mime_type = "image/png"
+                    else:
+                        mime_type = "application/octet-stream"
+                    
+                    # Read and encode file
+                    with open(file_path, "rb") as f:
+                        file_data = f.read()
+                    b64_data = base64.b64encode(file_data).decode("utf-8")
+                    
+                    # Return attachment format from OpenClaw source code (PR #70947)
+                    # For non-image files: type: "file", fileName, mimeType, content
+                    # For image files: we can use the same format, or type: "image"
+                    is_image = mime_type.startswith("image/")
+                    if is_image:
+                        return {
+                            "name": filename,
+                            "mimeType": mime_type,
+                            "media": f"data:{mime_type};base64,{b64_data}"
+                        }
+                    else:
+                        return {
+                            "type": "file",
+                            "mimeType": mime_type,
+                            "fileName": filename,
+                            "content": b64_data  # Just base64, no data URL prefix
+                        }
+                
                 # First round: 你好，你是谁
                 await send_message_and_wait("你好，你是谁")
                 
-                # Second round: 我想写首诗
-                await send_message_and_wait("我想写首诗")
+                # Second round: Upload test article and ask question
+                print("\n📄 Loading test article...")
+                attachment = load_file_as_attachment("/home/jichong/下载/test.docx")
+                await send_message_and_wait("这篇文章说了什么？", attachments=[attachment])
                 
     except Exception as e:
         print(f"Error: {e}")
