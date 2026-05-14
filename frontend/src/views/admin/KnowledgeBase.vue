@@ -299,13 +299,16 @@ onMounted(() => {
 .kb-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .kb-name {
   font-size: 16px;
   font-weight: 600;
   color: #333;
-  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 .kb-desc {
@@ -314,6 +317,7 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
 }
 
 .kb-meta {

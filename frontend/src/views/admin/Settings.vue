@@ -394,6 +394,9 @@ function saveSettings() {
 function saveSystemSettings() {
   axios.post('/system/config/', systemConfig)
     .then(() => {
+      if (systemConfig.name) {
+        document.title = systemConfig.name
+      }
       showNotification('系统配置已保存')
     })
     .catch(error => {
