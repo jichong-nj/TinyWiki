@@ -115,11 +115,33 @@
             </option>
           </select>
         </div>
+
+        <div class="attachment-uploader" v-if="chatMode === 'openclaw'">
+          <label class="attachment-label">
+            <input
+              type="file"
+              multiple
+              ref="attachmentInputRef"
+              @change="handleAttachmentChange"
+            />
+            选择附件
+          </label>
+          <div class="attachment-list" v-if="openclawAttachments.length > 0">
+            <div
+              class="attachment-item"
+              v-for="(file, index) in openclawAttachments"
+              :key="file.name + file.size"
+            >
+              <span>{{ file.name }} ({{ formatFileSize(file.size) }})</span>
+              <button type="button" @click="removeAttachment(index)">删除</button>
+            </div>
+          </div>
+        </div>
         
         <div class="input-area">
           <textarea 
             v-model="inputMessage" 
-            placeholder="输入问题..." 
+            placeholder="输入问题或上传附件..." 
             @keydown.enter.prevent="sendMessage"
             rows="1"
             ref="textareaRef"
@@ -127,7 +149,7 @@
           <button 
             class="send-btn" 
             @click="sendMessage"
-            :disabled="!inputMessage.trim() || isLoading || !canSend"
+            :disabled="isLoading || !canSend"
           >
             发送
           </button>
@@ -162,6 +184,8 @@ const isOpen = computed({
 
 const messagesRef = ref(null)
 const textareaRef = ref(null)
+const attachmentInputRef = ref(null)
+const openclawAttachments = ref([])
 const showSessionList = ref(false)
 const sessions = ref([])
 const currentSession = ref(null)
@@ -178,7 +202,7 @@ const canSend = computed(() => {
   if (chatMode.value === 'builtin') {
     return selectedKBId.value !== null && selectedKBId.value !== ''
   } else {
-    return selectedAgentId.value !== null && selectedAgentId.value !== ''
+    return selectedAgentId.value !== null && selectedAgentId.value !== '' && (inputMessage.value.trim() !== '' || openclawAttachments.value.length > 0)
   }
 })
 
@@ -264,12 +288,16 @@ const onKBChange = async () => {
 }
 
 const sendMessage = async () => {
-  if (!inputMessage.value.trim() || isLoading.value || !canSend.value) {
+  const hasAttachments = chatMode.value === 'openclaw' && openclawAttachments.value.length > 0
+  if ((!inputMessage.value.trim() && !hasAttachments) || isLoading.value || !canSend.value) {
     return
   }
   
   isLoading.value = true
-  const userContent = inputMessage.value
+  let userContent = inputMessage.value.trim()
+  if (!userContent && hasAttachments) {
+    userContent = '请分析附件内容'
+  }
   inputMessage.value = ''
   
   // 立即添加用户消息到界面
@@ -323,12 +351,24 @@ const sendBuiltinMessage = async (userContent, tempMsgId) => {
 }
 
 const sendOpenClawMessage = async (userContent, tempMsgId) => {
-  const response = await axios.post('/openclaw/chat/', {
-    agent_id: selectedAgentId.value,
-    query: userContent,
-    knowledge_base_id: selectedKBId.value
+  const formData = new FormData()
+  formData.append('agent_id', selectedAgentId.value)
+  formData.append('query', userContent)
+  if (selectedKBId.value) {
+    formData.append('knowledge_base_id', selectedKBId.value)
+  }
+  openclawAttachments.value.forEach((file) => {
+    formData.append('attachments', file)
   })
+
+  const response = await axios.post('/openclaw/chat/', formData)
   
+  // 清空附件输入
+  openclawAttachments.value = []
+  if (attachmentInputRef.value) {
+    attachmentInputRef.value.value = ''
+  }
+
   // 移除临时消息，添加服务器返回的消息
   messages.value = messages.value.filter(m => m.id !== tempMsgId)
   
@@ -347,6 +387,25 @@ const sendOpenClawMessage = async (userContent, tempMsgId) => {
     content: response.data.data?.response || response.data.data || '未获取到响应',
     created_at: new Date().toISOString()
   })
+}
+
+const handleAttachmentChange = (event) => {
+  const files = event.target.files ? Array.from(event.target.files) : []
+  openclawAttachments.value = files
+}
+
+const removeAttachment = (index) => {
+  openclawAttachments.value.splice(index, 1)
+}
+
+const formatFileSize = (bytes) => {
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  const gb = mb / 1024
+  return `${gb.toFixed(1)} GB`
 }
 
 const formatMarkdown = (content) => {
@@ -735,6 +794,53 @@ watch(isOpen, async (val) => {
 
 .agent-selector {
   margin-bottom: 12px;
+}
+
+.attachment-uploader {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attachment-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border: 1px dashed #667eea;
+  border-radius: 10px;
+  color: #667eea;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.attachment-label input[type="file"] {
+  display: none;
+}
+
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  background: #fbfbff;
+  font-size: 13px;
+}
+
+.attachment-item button {
+  border: none;
+  background: transparent;
+  color: #d23f3f;
+  cursor: pointer;
 }
 
 .kb-selector select,

@@ -230,30 +230,41 @@ class OpenClawClient:
                         print(f"[OpenClaw] 请求错误: {error_msg}")
                         raise Exception(error_msg)
 
-                    if msg.get("type") == "event" and msg.get("event") in {"chat", "chat.message"}:
+                    if msg.get("type") == "event":
+                        event_name = msg.get("event")
                         payload = msg.get("payload", {})
-                        state = payload.get("state")
-                        message = payload.get("message", {})
-                        
                         content = ""
-                        if isinstance(message, dict):
-                            blocks = message.get("content", [])
-                            if isinstance(blocks, list):
-                                for block in blocks:
-                                    if block.get("type") == "text":
-                                        content += block.get("text", "")
-                                    elif block.get("type") == "markdown":
-                                        content += block.get("text", "")
-                            if not content:
-                                content = message.get("text", "")
-                        
+                        state = payload.get("state")
+
+                        if event_name in {"chat", "chat.message"}:
+                            message = payload.get("message", {})
+                            if isinstance(message, dict):
+                                blocks = message.get("content", [])
+                                if isinstance(blocks, list):
+                                    for block in blocks:
+                                        if block.get("type") == "text":
+                                            content += block.get("text", "")
+                                        elif block.get("type") == "markdown":
+                                            content += block.get("text", "")
+                                if not content:
+                                    content = message.get("text", "")
+
+                        elif event_name == "agent":
+                            agent_data = payload.get("data", {})
+                            if isinstance(agent_data, dict):
+                                content = agent_data.get("text", "")
+                                if content and not isinstance(content, str):
+                                    content = str(content)
+                                if not state:
+                                    state = payload.get("stream")
+
                         if content:
                             final_response = content
-                        
-                        if state == "final":
+
+                        if state == "final" or state == "end":
                             print(f"[OpenClaw] 收到最终响应")
                             break
-                        elif state in {"delta", "generating"}:
+                        elif state in {"delta", "generating", "assistant", "start", "working"}:
                             print(f"[OpenClaw] Agent 正在生成响应... state={state}")
                 except asyncio.TimeoutError:
                     timeout_count += 1

@@ -4,6 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
 import os
+import base64
 from .models import AIConfig
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
@@ -302,6 +303,7 @@ def system_config(request):
 
 # ========== OpenClaw 相关接口 ==========
 import asyncio
+from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -368,6 +370,33 @@ class OpenClawAgentsView(APIView):
 class OpenClawChatView(APIView):
     """与 OpenClaw Agent 对话"""
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    
+    def _parse_attachments(self, request):
+        attachments = []
+        uploaded_files = request.FILES.getlist('attachments') or request.FILES.getlist('files')
+        for uploaded_file in uploaded_files:
+            content = uploaded_file.read()
+            mime_type = uploaded_file.content_type or 'application/octet-stream'
+            encoded = base64.b64encode(content).decode('utf-8')
+            if mime_type.startswith('image/'):
+                attachments.append({
+                    'name': uploaded_file.name,
+                    'mimeType': mime_type,
+                    'media': f'data:{mime_type};base64,{encoded}'
+                })
+            else:
+                attachments.append({
+                    'type': 'file',
+                    'mimeType': mime_type,
+                    'fileName': uploaded_file.name,
+                    'content': encoded
+                })
+
+        # 兼容直接传入 attachments JSON 字段的情况
+        if not attachments and isinstance(request.data.get('attachments'), list):
+            attachments = request.data.get('attachments')
+        return attachments
     
     def post(self, request):
         try:
@@ -382,11 +411,15 @@ class OpenClawChatView(APIView):
                 return Response({'success': False, 'message': 'OpenClaw Gateway Token 未配置'}, status=status.HTTP_400_BAD_REQUEST)
             
             agent_id = request.data.get('agent_id')
-            user_query = request.data.get('query')
+            user_query = request.data.get('query', '')
             knowledge_base_id = request.data.get('knowledge_base_id')
+            attachments = self._parse_attachments(request)
             
-            if not agent_id or not user_query:
-                return Response({'success': False, 'message': '缺少必要参数: agent_id 和 query'}, status=status.HTTP_400_BAD_REQUEST)
+            if not agent_id or (not user_query and not attachments):
+                return Response({'success': False, 'message': '缺少必要参数: agent_id 和 query，或至少上传一个附件'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not user_query and attachments:
+                user_query = '请分析上传的附件并给出结论。'
             
             # 构建知识库上下文
             context = ""
@@ -434,7 +467,8 @@ class OpenClawChatView(APIView):
                 client.chat(
                     message=full_user_message,
                     session_key=session_key,
-                    agent_id=agent_id
+                    agent_id=agent_id,
+                    attachments=attachments
                 )
             )
             
