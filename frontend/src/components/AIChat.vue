@@ -666,6 +666,10 @@ watch(isOpen, async (val) => {
   max-width: 70%;
 }
 
+.ai-chat-panel.maximized .message-content {
+  max-width: 85%;
+}
+
 .message.user .message-content {
   display: flex;
   flex-direction: column;
