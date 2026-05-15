@@ -210,3 +210,11 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         start_queue_service()
+        
+        # 保持主进程存活，防止守护线程被杀死
+        try:
+            while True:
+                time.sleep(10)
+        except KeyboardInterrupt:
+            logger.info('Queue service stopped by user.')
+        
