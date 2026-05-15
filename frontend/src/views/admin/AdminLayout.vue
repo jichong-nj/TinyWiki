@@ -25,7 +25,7 @@
       
       <div class="sidebar-footer">
         <el-button type="primary" @click="switchToWiki">切换 Wiki</el-button>
-        <el-button text @click="handleLogout">退出登录</el-button>
+        <el-button type="primary" plain @click="handleLogout">退出登录</el-button>
       </div>
     </aside>
     
