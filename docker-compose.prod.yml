@@ -1,4 +1,4 @@
-services:
+
   db:
     build: ./postgres
     image: tinywiki-db:latest
@@ -47,16 +47,5 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
-      - static_volume:/app/knowledge_base/staticfiles
-      - media_volume:/app/knowledge_base/media
-      - storage_volume:/app/knowledge_base/storage
-      - ./frontend-dist:/usr/share/nginx/html
-    depends_on:
-      - web
-    restart: always
-
-volumes:
-  postgres_data:
-  static_volume:
-  media_volume:
-  storage_volume:
+      # Mount data directories to specific paths for static resources
+      - ./data

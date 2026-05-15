@@ -40,3 +40,4 @@ knowledge_base/test_keypair.pem
 # Docker 数据目录（运行时自动创建，不应提交到版本控制）
 data/
 
+wps-plugin/wps-addon-build/

@@ -1,7 +1,3 @@
-# TinyWiki - 企业级知识库管理系统
-
-TinyWiki 是一个基于 Django + Vue + PostgreSQL 的企业级知识库管理系统，支持文档管理、全文搜索、AI 问答和权限管理等功能。
-
 ---
 
 ## 功能特性

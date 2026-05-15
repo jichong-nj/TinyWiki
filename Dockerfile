@@ -22,10 +22,11 @@ RUN apt-get update && apt-get install -y \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
-# 复制后端代码
+# 复制前端代码和后端代码
+COPY frontend/ ./frontend/
 COPY knowledge_base/ ./knowledge_base/
 
-# 工作目录
+# 构建前端
 WORKDIR /app/knowledge_base
 
 # 暴露端口（改为8080）
