@@ -1126,7 +1126,17 @@ async function startUpload() {
     }
     
     const successCount = importFiles.value.filter(item => item.status === 'success').length
-    ElMessage.success(`成功导入 ${successCount}/${importFiles.value.length} 个文件`)
+    
+    if (successCount === importFiles.value.length) {
+      // 全部成功，关闭弹窗
+      ElMessage.success(`成功导入 ${successCount} 个文件`)
+      showImportDialog.value = false
+      importFiles.value = []
+      fileIdCounter = 0
+    } else {
+      // 存在失败的文件，保持弹窗打开供用户重试
+      ElMessage.warning(`成功导入 ${successCount}/${importFiles.value.length} 个文件，部分文件导入失败`)
+    }
     
     loadDocuments()
   } catch (error: any) {
