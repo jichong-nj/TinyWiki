@@ -6,7 +6,7 @@
         <p>欢迎登录</p>
       </div>
       
-      <el-form :model="form" ref="formRef" label-width="80px">
+      <el-form :model="form" ref="formRef" label-width="80px" @submit.prevent="handleLogin">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="form.username" placeholder="请输入用户名" />
         </el-form-item>
