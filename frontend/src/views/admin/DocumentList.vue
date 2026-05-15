@@ -1054,6 +1054,7 @@ function handleFileChange(_file: any, fileList: any[]) {
   
   const existingNames = new Set(importFiles.value.map(item => item.file.name))
   
+  let hasDuplicate = false
   for (const f of newFiles) {
     if (!existingNames.has(f.name)) {
       importFiles.value.push({
@@ -1062,8 +1063,11 @@ function handleFileChange(_file: any, fileList: any[]) {
         status: 'pending'
       })
     } else {
-      ElMessage.warning(`文件 "${f.name}" 已存在于选择列表中，将跳过重复文件`)
+      hasDuplicate = true
     }
+  }
+  if (hasDuplicate) {
+    ElMessage.warning('已跳过重复文件')
   }
 }
 
