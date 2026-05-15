@@ -54,6 +54,31 @@ services:
     networks:
       - app-network
 
+  queue-worker:
+    build: .
+    command: python manage.py run_document_queue_service
+    volumes:
+      - ./knowledge_base:/app/knowledge_base
+      - ${DATA_DIR}/staticfiles:/app/knowledge_base/staticfiles
+      - ${DATA_DIR}/media:/app/knowledge_base/media
+      - ${DATA_DIR}/storage:/app/knowledge_base/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: "django-insecure-this-is-a-simple-secret-key-change-it-in-production"
+      ALLOWED_HOSTS: "*"
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      CORS_ALLOW_ALL: "True"
+    restart: always
+    networks:
+      - app-network
+
   nginx:
     image: nginx:alpine
     ports:
