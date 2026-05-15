@@ -3,7 +3,6 @@ logs
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
@@ -37,3 +36,7 @@ knowledge_base/staticfiles/
 knowledge_base/media/
 knowledge_base/openclaw_keypair.pem
 knowledge_base/test_keypair.pem
+
+# Docker 数据目录（运行时自动创建，不应提交到版本控制）
+data/
+
