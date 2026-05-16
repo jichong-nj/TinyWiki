@@ -59,7 +59,7 @@
                   <div 
                     v-for="(doc, idx) in msg.retrieved_documents" 
                     :key="idx"
-                    class="source-item"
+                    class="source-item"弹
                   >
                     <span class="source-title">{{ doc.title }}</span>
                     <span class="source-score">相关性: {{ (doc.score * 100).toFixed(0) }}%</span>
@@ -114,12 +114,32 @@
           </div>
           
           <div class="agent-selector" v-if="chatMode === 'openclaw'">
-            <select v-model="selectedAgentId">
-              <option value="">选择 Agent</option>
-              <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-                {{ agent.name }}
-              </option>
-            </select>
+            <div class="custom-select-wrapper" :class="{ open: agentDropdownOpen }">
+              <div class="custom-select-trigger" @click="agentDropdownOpen = !agentDropdownOpen">
+                <span v-if="selectedAgent" class="selected-agent-display">
+                  {{ selectedAgent.emoji }} {{ selectedAgent.display_name }}
+                </span>
+                <span v-else class="placeholder">选择 Agent</span>
+                <span class="select-arrow"></span>
+              </div>
+              <transition name="dropdown">
+                <div v-if="agentDropdownOpen" class="custom-select-dropdown">
+                  <div 
+                    v-for="agent in agents" 
+                    :key="agent.id"
+                    class="dropdown-item"
+                    :class="{ active: selectedAgentId === agent.id }"
+                    @click="selectAgent(agent)"
+                  >
+                    <span class="item-emoji">{{ agent.emoji }}</span>
+                    <div class="item-info">
+                      <span class="item-name">{{ agent.display_name }}</span>
+                      <span class="item-theme" v-if="agent.theme">{{ agent.theme }}</span>
+                    </div>
+                  </div>
+                </div>
+              </transition>
+            </div>
           </div>
         </div>
 
@@ -205,6 +225,16 @@ const selectedKBId = ref(null);
 const chatMode = ref('builtin');
 const agents = ref([]);
 const selectedAgentId = ref(null);
+const agentDropdownOpen = ref(false);
+
+const selectedAgent = computed(() => {
+  return agents.value.find(a => a.id === selectedAgentId.value) || null;
+});
+
+const selectAgent = (agent) => {
+  selectedAgentId.value = agent.id;
+  agentDropdownOpen.value = false;
+};
 
 const canSend = computed(() => {
   if (chatMode.value === 'builtin') {
@@ -835,9 +865,146 @@ watch(isOpen, async (val) => {
   outline: none;
 }
 
-.kb-selector select:focus,
-.agent-selector select:focus {
+.agent-selector {
+  flex: 1;
+  min-width: 140px;
+  position: relative;
+}
+
+.custom-select-wrapper {
+  position: relative;
+}
+
+.custom-select-trigger {
+  width: 100%;
+  padding: 8px 32px 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  transition: border-color 0.2s;
+  user-select: none;
+  overflow: hidden;
+}
+
+.custom-select-trigger:hover {
+  border-color: #bbb;
+}
+
+.custom-select-wrapper.open .custom-select-trigger {
   border-color: #667eea;
+}
+
+.selected-agent-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.placeholder {
+  color: #999;
+}
+
+.select-arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #888;
+  pointer-events: none;
+}
+
+.custom-select-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item:hover {
+  background: #f8f9fa;
+}
+
+.dropdown-item.active {
+  background: #e8f0fe;
+}
+
+.item-emoji {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-theme {
+  font-size: 12px;
+  color: #888;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Dropdown transition */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .attachment-list {

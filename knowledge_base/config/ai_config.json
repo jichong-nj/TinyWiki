@@ -2,15 +2,15 @@
   "textGeneration": {
     "provider": "openai",
     "apiKey": "11111",
-    "baseUrl": "http://20.20.100.203:1234/v1",
+    "baseUrl": "http://192.168.31.90:1234/v1",
     "modelName": "qwen3.6-35b-a3b",
     "temperature": 0.7
   },
   "embedding": {
     "provider": "openai",
     "apiKey": "1111",
-    "baseUrl": "http://20.20.100.203:1234/v1",
-    "modelName": "bge-m3",
+    "baseUrl": "http://192.168.31.90:1234/v1",
+    "modelName": "text-embedding-bge-m3",
     "dimension": 1024,
     "inputType": "query"
   },

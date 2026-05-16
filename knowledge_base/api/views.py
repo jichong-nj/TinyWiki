@@ -353,10 +353,14 @@ class OpenClawAgentsView(APIView):
             agents = []
             for agent in agents_data:
                 agent_id = agent.get('id', '')
+                identity = agent.get('identity') or {}
                 agents.append({
                     'id': agent_id,
                     'name': agent.get('name', agent_id),
-                    'description': agent.get('description', '')
+                    'description': agent.get('description', ''),
+                    'emoji': identity.get('emoji', '🤖'),
+                    'display_name': identity.get('name') or agent.get('name', agent_id),
+                    'theme': identity.get('theme', '')
                 })
             
             return Response({'success': True, 'data': agents})
