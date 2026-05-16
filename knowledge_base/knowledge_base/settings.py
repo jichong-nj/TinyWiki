@@ -72,11 +72,11 @@ WSGI_APPLICATION = 'knowledge_base.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'tinywiki'),
-        'USER': os.getenv('POSTGRES_USER', 'tinywiki_user'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'tinywiki_password'),
-        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-        'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        'NAME': os.getenv('POSTGRES_DB') or os.getenv('DB_NAME', 'tinywiki'),
+        'USER': os.getenv('POSTGRES_USER') or os.getenv('DB_USER', 'tinywiki_user'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD') or os.getenv('DB_PASSWORD', 'wiki123456'),
+        'HOST': os.getenv('POSTGRES_HOST') or os.getenv('DB_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT') or os.getenv('DB_PORT', '5432'),
     }
 }
 
