@@ -101,12 +101,14 @@ function OnAction(control) {
         const token = localStorage.getItem('accessToken');
         const username = localStorage.getItem('currentUsername');
         let route = '/login';
+        let title = 'AI助手';
         if (token && username) {
           route = '/aichat';
+          title = 'AI助手(' + username + ')';
         }
         window.Application.ShowDialog(
           Util.GetUrlPath() + Util.GetRouterHash() + route,
-          'AI助手',
+          title,
           800 * window.devicePixelRatio,
           600 * window.devicePixelRatio,
           false
