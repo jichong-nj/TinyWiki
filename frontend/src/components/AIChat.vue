@@ -868,11 +868,14 @@ watch(isOpen, async (val) => {
 .agent-selector {
   flex: 1;
   min-width: 140px;
+  max-width: 100%;
   position: relative;
 }
 
 .custom-select-wrapper {
   position: relative;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .custom-select-trigger {
@@ -890,6 +893,7 @@ watch(isOpen, async (val) => {
   transition: border-color 0.2s;
   user-select: none;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .custom-select-trigger:hover {
@@ -908,10 +912,18 @@ watch(isOpen, async (val) => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.selected-agent-display .emoji {
+  flex-shrink: 0;
 }
 
 .placeholder {
   color: #999;
+  flex: 1;
+  min-width: 0;
 }
 
 .select-arrow {
@@ -931,7 +943,7 @@ watch(isOpen, async (val) => {
   position: absolute;
   bottom: calc(100% + 4px);
   left: 0;
-  right: 0;
+  width: 100%;
   background: white;
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -939,6 +951,7 @@ watch(isOpen, async (val) => {
   z-index: 1000;
   max-height: 300px;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .dropdown-item {
