@@ -1,13 +1,5 @@
 <template>
   <div class="ai-chat-panel">
-    <div class="chat-header">
-      <div class="chat-header-left">
-        <span class="chat-icon">🤖</span>
-        <span class="chat-title">AI 助手</span>
-        <span v-if="username" class="chat-username">({{ username }})</span>
-      </div>
-    </div>
-    
     <div class="chat-body">
       <div class="session-list" v-if="showSessionList && chatMode === 'builtin'">
         <div class="session-header">
@@ -573,37 +565,6 @@ watch(selectedKBId, (newVal) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  flex-shrink: 0;
-}
-
-.chat-header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.chat-icon {
-  font-size: 24px;
-}
-
-.chat-title {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.chat-username {
-  font-size: 13px;
-  font-weight: 400;
-  opacity: 0.9;
 }
 
 .chat-body {
