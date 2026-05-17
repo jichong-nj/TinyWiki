@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="ai-chat-view-container">
     <div v-if="isLoading" class="loading-container">
       加载中...
     </div>
@@ -52,9 +52,17 @@ export default {
 </script>
 
 <style scoped>
+.ai-chat-view-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .loading-container {
   width: 100%;
-  height: 600px;
+  height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;

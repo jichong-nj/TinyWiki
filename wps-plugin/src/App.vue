@@ -1,8 +1,16 @@
 <template>
-  <RouterView />
+  <div class="app-container">
+    <RouterView />
+  </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+.app-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+</style>
 
 <script>
 import { ref, onMounted } from 'vue'

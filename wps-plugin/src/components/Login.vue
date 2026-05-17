@@ -150,14 +150,14 @@ export default {
 <style scoped>
 .login-page {
   width: 100%;
-  min-height: 100%;
-  height: auto;
+  height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
   box-sizing: border-box;
+  overflow: auto;
 }
 
 .login-container {

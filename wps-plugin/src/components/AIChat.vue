@@ -572,12 +572,14 @@ watch(selectedKBId, (newVal) => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .session-list {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .session-header {
@@ -586,6 +588,7 @@ watch(selectedKBId, (newVal) => {
   align-items: center;
   padding: 12px 20px;
   border-bottom: 1px solid #eee;
+  flex-shrink: 0;
 }
 
 .session-header h3 {
@@ -603,6 +606,7 @@ watch(selectedKBId, (newVal) => {
   cursor: pointer;
   font-size: 13px;
   transition: transform 0.2s;
+  flex-shrink: 0;
 }
 
 .new-session-btn:hover {
@@ -612,6 +616,7 @@ watch(selectedKBId, (newVal) => {
 .session-items {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .session-item {
@@ -648,6 +653,7 @@ watch(selectedKBId, (newVal) => {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+  min-height: 0;
 }
 
 .message-list {
