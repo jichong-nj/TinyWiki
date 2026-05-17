@@ -1,41 +1,23 @@
 <template>
-  <div class="app-wrapper">
-    <Login v-if="!isLoggedIn" @login-success="handleLoginSuccess" />
-    <AIChat v-else @logout="handleLogout" />
-  </div>
+  <RouterView />
 </template>
 
-<script setup lang="ts">
+<style scoped></style>
+
+<script>
 import { ref, onMounted } from 'vue'
-import Login from './components/Login.vue'
-import AIChat from './components/AIChat.vue'
+import ribbon from './components/ribbon.js'
+export default {
+  setup() {
+    const message = ref('你好，wps加载项')
+    onMounted(() => {
+      window.ribbon = ribbon
+    })
 
-const isLoggedIn = ref(false)
-
-const checkLogin = () => {
-  const token = localStorage.getItem('tinywiki_access_token')
-  isLoggedIn.value = !!token
+    return {
+      message
+    }
+  }
 }
-
-const handleLoginSuccess = () => {
-  isLoggedIn.value = true
-}
-
-const handleLogout = () => {
-  localStorage.removeItem('tinywiki_access_token')
-  localStorage.removeItem('tinywiki_refresh_token')
-  isLoggedIn.value = false
-}
-
-onMounted(() => {
-  checkLogin()
-})
 </script>
 
-<style scoped>
-.app-wrapper {
-  width: 100%;
-  height: 100%;
-  background: #f5f7fa;
-}
-</style>

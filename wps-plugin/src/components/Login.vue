@@ -1,195 +1,302 @@
 <template>
-  <div class="login-container">
-    <div class="login-card">
-      <div class="login-header">
-        <span class="logo-icon">🤖</span>
-        <h1>TinyWiki AI</h1>
-        <p>登录您的账号</p>
+  <div class="login-page">
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-header">
+          <div class="logo">🤖</div>
+          <h1>AI 助手</h1>
+          <p>请登录以继续使用</p>
+        </div>
+        
+        <form @submit.prevent="handleLogin" class="login-form">
+          <div class="form-group">
+            <label for="username">用户名</label>
+            <input
+              id="username"
+              type="text"
+              v-model="form.username"
+              placeholder="请输入用户名"
+              required
+              autocomplete="username"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="password">密码</label>
+            <input
+              id="password"
+              type="password"
+              v-model="form.password"
+              placeholder="请输入密码"
+              required
+              autocomplete="current-password"
+            />
+          </div>
+          
+          <div class="remember-row">
+            <label class="remember-checkbox">
+              <input type="checkbox" v-model="rememberMe" />
+              <span>记住密码</span>
+            </label>
+          </div>
+          
+          <div class="error-message" v-if="error">
+            {{ error }}
+          </div>
+          
+          <button type="submit" class="login-button" :disabled="loading">
+            <span v-if="loading" class="loading-spinner"></span>
+            {{ loading ? '登录中...' : '登录' }}
+          </button>
+        </form>
       </div>
-
-      <form @submit.prevent="handleLogin" class="login-form">
-        <div class="form-group">
-          <label>服务器地址</label>
-          <input
-            v-model="serverUrl"
-            type="text"
-            placeholder="http://localhost:8000/api"
-            class="form-input"
-          />
-        </div>
-
-        <div class="form-group">
-          <label>用户名</label>
-          <input
-            v-model="username"
-            type="text"
-            placeholder="请输入用户名"
-            class="form-input"
-            required
-          />
-        </div>
-
-        <div class="form-group">
-          <label>密码</label>
-          <input
-            v-model="password"
-            type="password"
-            placeholder="请输入密码"
-            class="form-input"
-            required
-          />
-        </div>
-
-        <button type="submit" class="login-btn" :disabled="loading">
-          {{ loading ? '登录中...' : '登录' }}
-        </button>
-
-        <div v-if="error" class="error-message">{{ error }}</div>
-      </form>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref } from 'vue'
-import axios, { updateBaseURL } from '../axios'
+<script>
+import axios from '../axios';
+import { ref, reactive, onMounted } from 'vue';
 
-const emit = defineEmits(['login-success'])
+export default {
+  name: 'LoginPage',
+  setup() {
+    const form = reactive({
+      username: '',
+      password: ''
+    });
+    const loading = ref(false);
+    const error = ref('');
+    const rememberMe = ref(false);
 
-const serverUrl = ref(localStorage.getItem('tinywiki_base_url') || 'http://localhost:8000/api')
-const username = ref('')
-const password = ref('')
-const loading = ref(false)
-const error = ref('')
+    onMounted(() => {
+      const savedUsername = localStorage.getItem('savedUsername');
+      const savedPassword = localStorage.getItem('savedPassword');
+      const remember = localStorage.getItem('rememberMe');
+      
+      if (remember === 'true' && savedUsername) {
+        form.username = savedUsername;
+        form.password = savedPassword || '';
+        rememberMe.value = true;
+      }
+    });
 
-const handleLogin = async () => {
-  if (!serverUrl.value) {
-    error.value = '请输入服务器地址'
-    return
+    const handleLogin = async () => {
+      if (!form.username || !form.password) {
+        error.value = '请输入用户名和密码';
+        return;
+      }
+
+      loading.value = true;
+      error.value = '';
+
+      try {
+        console.log('正在登录...', form.username);
+        
+        const response = await axios.post('/auth/login/', {
+          username: form.username,
+          password: form.password
+        });
+
+        console.log('登录响应:', response);
+
+        const { access, refresh } = response.data;
+        
+        localStorage.setItem('accessToken', access);
+        localStorage.setItem('refreshToken', refresh);
+        localStorage.setItem('currentUsername', form.username);
+        
+        axios.defaults.headers.common['Authorization'] = `Bearer ${access}`;
+        
+        if (rememberMe.value) {
+          localStorage.setItem('savedUsername', form.username);
+          localStorage.setItem('savedPassword', form.password);
+          localStorage.setItem('rememberMe', 'true');
+        } else {
+          localStorage.removeItem('savedUsername');
+          localStorage.removeItem('savedPassword');
+          localStorage.setItem('rememberMe', 'false');
+        }
+        
+        console.log('登录成功，token 已保存');
+        
+        window.location.hash = '#/aichat';
+        
+      } catch (err) {
+        console.error('登录失败:', err);
+        if (err.response?.status === 401) {
+          error.value = '用户名或密码错误';
+        } else if (err.response?.data?.detail) {
+          error.value = err.response.data.detail;
+        } else {
+          error.value = '登录失败，请检查网络连接';
+        }
+      } finally {
+        loading.value = false;
+      }
+    };
+
+    return {
+      form,
+      loading,
+      error,
+      rememberMe,
+      handleLogin
+    };
   }
-
-  loading.value = true
-  error.value = ''
-
-  try {
-    // 更新基础 URL
-    updateBaseURL(serverUrl.value.replace(/\/api$/, '') + '/api')
-
-    const response = await axios.post('/auth/login/', {
-      username: username.value,
-      password: password.value
-    })
-
-    localStorage.setItem('tinywiki_access_token', response.data.access)
-    localStorage.setItem('tinywiki_refresh_token', response.data.refresh)
-    emit('login-success')
-  } catch (err: any) {
-    error.value = err.response?.data?.detail || '登录失败，请检查账号密码和服务器地址'
-  } finally {
-    loading.value = false
-  }
-}
+};
 </script>
 
 <style scoped>
+.login-page {
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  box-sizing: border-box;
+}
+
 .login-container {
   width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  max-width: 420px;
 }
 
 .login-card {
   background: white;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  width: 100%;
-  max-width: 360px;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 35px;
 }
 
-.logo-icon {
-  font-size: 48px;
-  display: block;
-  margin-bottom: 8px;
+.logo {
+  font-size: 64px;
+  margin-bottom: 15px;
 }
 
 .login-header h1 {
-  font-size: 24px;
+  margin: 0 0 10px 0;
   color: #333;
-  margin: 0 0 8px 0;
+  font-size: 28px;
+  font-weight: 600;
 }
 
 .login-header p {
-  font-size: 14px;
-  color: #888;
   margin: 0;
+  color: #666;
+  font-size: 14px;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .form-group label {
-  font-size: 13px;
-  color: #555;
+  color: #333;
   font-weight: 500;
-}
-
-.form-input {
-  padding: 10px 14px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
   font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
 }
 
-.form-input:focus {
-  border-color: #667eea;
-}
-
-.login-btn {
-  padding: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
+.form-group input {
+  padding: 14px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
   font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: transform 0.2s, opacity 0.2s;
-  margin-top: 8px;
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
 }
 
-.login-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.login-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.form-group input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .error-message {
   color: #d23f3f;
   font-size: 13px;
   text-align: center;
-  margin-top: 8px;
+  padding: 10px;
+  background: #fef2f2;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+}
+
+.remember-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.remember-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+}
+
+.remember-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.login-button {
+  padding: 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.login-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.login-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
